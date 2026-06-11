@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node *)",
+      "WebSearch",
+      "Bash(xargs ls *)",
+      "WebFetch(domain:tradingview.github.io)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:www.tradingview.com)",
+      "Bash(gh api *)"
+    ]
+  }
+}
