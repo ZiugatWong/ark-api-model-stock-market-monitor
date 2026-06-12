@@ -7,7 +7,7 @@
 // @license      GPLv3
 // @homepage     https://github.com/ZiugatWong/ark-api-model-stock-market-monitor
 // @supportURL   https://github.com/ZiugatWong/ark-api-model-stock-market-monitor
-// @icon         https://test-fast.windhub.cc/favicon.ico
+// @icon         https://img.cdn1.vip/i/69be11f7070b0_1774064119.webp
 // @match        https://windhub.cc/*
 // @match        https://test-fast.windhub.cc/*
 // @grant        GM_setValue
