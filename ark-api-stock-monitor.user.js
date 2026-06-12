@@ -3434,7 +3434,7 @@
         </div>
         <div class="panel-body">
           <div class="ark-section">
-            <div class="ark-section-label">定时获取</div>
+            <div class="ark-section-label">定时获取最新价格</div>
             <div class="ark-trigger-row">
               <span style="color:var(--ark-label);font-size:12px;">启用：</span>
               <label class="ark-toggle">
