@@ -1,11 +1,19 @@
-# Ark API 模型股票监控
+<div align="center">
+<h1>Ark API 模型股票监控</h1>
+<a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Greasyfork Version" src="https://img.shields.io/greasyfork/v/582321?style=flat-square"></a>
+<a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Downloads Total" src="https://img.shields.io/greasyfork/dt/582321?style=flat-square"></a>
+<a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Downloads Per Day" src="https://img.shields.io/greasyfork/dd/582321?style=flat-square"></a>
+<a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Rating" src="https://img.shields.io/greasyfork/rating-count/582321?style=flat-square"></a>
+<br>
+<br>
+</div>
 
-Tampermonkey 脚本，为 windhub.cc 的 Ark API 模型股票提供实时价格监控和数据分析。
+为 windhub.cc 的 Ark API 模型股票提供实时价格监控和数据分析。
 
 ## 安装
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展
-2. 点击 `ark-api-stock-monitor.user.js` 文件安装脚本
+2. 点击 [Ark API 模型股市监控脚本](https://greasyfork.org/zh-CN/scripts/582321)进入 Greasy Fork 并安装脚本
 3. 访问 [windhub.cc](https://windhub.cc) 或 [test-fast.windhub.cc](https://test-fast.windhub.cc)
 4. 点击浏览器工具栏的 Tampermonkey 图标，选择相应面板打开
 
