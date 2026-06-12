@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ark API 模型股市监控
 // @namespace    http://tampermonkey.net/
-// @version      1.0.0
+// @version      1.1.0
 // @description  监控 Ark API 模型股市价格
 // @match        https://windhub.cc/*
 // @match        https://test-fast.windhub.cc/*
@@ -48,6 +48,7 @@
     lastPriceDataCleanDate: null,
     userQuota: null,
     holdingsTotalValue: null,
+    theme: "dark",
   };
 
   // ==================== 存储 ====================
@@ -83,6 +84,7 @@
           userQuota: d.userQuota !== undefined ? d.userQuota : null,
           holdingsTotalValue:
             d.holdingsTotalValue !== undefined ? d.holdingsTotalValue : null,
+          theme: d.theme === "light" ? "light" : "dark",
         };
       } catch {
         return JSON.parse(JSON.stringify(DEFAULT_DATA));
@@ -90,6 +92,85 @@
     },
     save(data) {
       GM_setValue(CONFIG.STORAGE_KEY, data);
+    },
+  };
+
+  // ==================== 主题 ====================
+  const Theme = {
+    current() {
+      return Storage.load().theme === "light" ? "light" : "dark";
+    },
+
+    // Lightweight Charts 画布配色（canvas 不读 CSS 变量，需用字面量）
+    chartColors(theme) {
+      if (theme === "light") {
+        return {
+          bg: "#ffffff",
+          text: "#4b5563",
+          grid: "#eceff3",
+          scaleBorder: "#d6dce3",
+          line: "#1c7ed6",
+        };
+      }
+      return {
+        bg: "#1a1a1a",
+        text: "#d1d4dc",
+        grid: "#2b2b43",
+        scaleBorder: "#2b2b43",
+        line: "#4dabf7",
+      };
+    },
+
+    apply(theme) {
+      const isLight = theme === "light";
+      document.body.classList.toggle("ark-theme-light", isLight);
+
+      // 同步主面板切换按钮图标/title
+      const btn = document.querySelector("#ark-theme-toggle-btn");
+      if (btn) {
+        btn.textContent = isLight ? "☀" : "\u{1F319}";
+        btn.title = isLight ? "切换到夜间主题" : "切换到日间主题";
+      }
+
+      // 已打开的图表实时刷新（面板外壳/tooltip 走 CSS 变量自动翻转，无需处理）
+      const mgr = ChartManager._manager;
+      if (mgr && mgr.chartInstances) {
+        const c = this.chartColors(theme);
+        for (const inst of mgr.chartInstances.values()) {
+          try {
+            if (inst.chart) {
+              inst.chart.applyOptions({
+                layout: {
+                  background: { type: "solid", color: c.bg },
+                  textColor: c.text,
+                },
+                grid: {
+                  vertLines: { color: c.grid },
+                  horzLines: { color: c.grid },
+                },
+                rightPriceScale: { borderColor: c.scaleBorder },
+                timeScale: { borderColor: c.scaleBorder },
+              });
+            }
+            if (inst.series) {
+              inst.series.applyOptions({
+                color: c.line,
+                crosshairMarkerBackgroundColor: c.line,
+              });
+            }
+          } catch (e) {
+            console.error("[Ark Stock Monitor] 图表主题切换失败:", e);
+          }
+        }
+      }
+    },
+
+    toggle() {
+      const d = Storage.load();
+      const next = d.theme === "light" ? "dark" : "light";
+      d.theme = next;
+      Storage.save(d);
+      this.apply(next);
     },
   };
 
@@ -599,14 +680,14 @@
       const count = triggered.length;
       const borderColor = triggered[0].type === "upper" ? "#ff6b6b" : "#4caf50";
 
-      let content = `<div style="position: absolute; top: 8px; right: 12px; font-size: 20px; color: #888; cursor: pointer; line-height: 1;" onclick="this.parentElement.remove()">&times;</div>`;
+      let content = `<div style="position: absolute; top: 8px; right: 12px; font-size: 20px; color: var(--ark-muted); cursor: pointer; line-height: 1;" onclick="this.parentElement.remove()">&times;</div>`;
       content += `<div style="font-size: 18px; font-weight: 600; margin-bottom: 15px; color: ${borderColor}">`;
       content += `🔔 价格突破提醒 (${count}个模型)</div>`;
-      content += `<div style="border-top: 1px solid #444; padding-top: 10px; margin-top: 10px;">`;
+      content += `<div style="border-top: 1px solid var(--ark-border-2); padding-top: 10px; margin-top: 10px;">`;
 
       triggered.forEach((item) => {
         const label = item.type === "upper" ? "突破上限" : "突破下限";
-        content += `<div style="margin: 10px 0; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 6px;">`;
+        content += `<div style="margin: 10px 0; padding: 8px; background: var(--ark-popup-item); border-radius: 6px;">`;
         content += `<div style="margin: 4px 0;">模型: <strong>${Utils.escapeHtml(item.model)}</strong></div>`;
         content += `<div style="margin: 4px 0;">当前价格: <strong class="price-pulse" style="font-size: 28px;">${item.price.toFixed(2)}</strong></div>`;
         content += `<div style="margin: 4px 0;">${label}: <strong>${item.limit}</strong></div>`;
@@ -614,7 +695,7 @@
       });
 
       content += `</div>`;
-      content += `<div style="border-top: 1px solid #444; padding-top: 10px; margin-top: 15px; font-size: 12px; color: #888;">`;
+      content += `<div style="border-top: 1px solid var(--ark-border-2); padding-top: 10px; margin-top: 15px; font-size: 12px; color: var(--ark-muted);">`;
       content += `时间: ${TimeUtils.formatDateTime(Date.now())}</div>`;
 
       const notificationEl = document.createElement("div");
@@ -624,15 +705,15 @@
         left: 50%;
         transform: translate(-50%, -50%);
         padding: 20px 25px;
-        background: rgba(26, 26, 26, 0.95);
+        background: var(--ark-popup-bg);
         border: 2px solid ${borderColor};
         border-radius: 12px;
-        color: #f0f0f0;
+        color: var(--ark-text);
         z-index: 200000;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 14px;
         text-align: center;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        box-shadow: 0 8px 32px var(--ark-shadow);
         max-width: 400px;
         width: 90%;
         max-height: 80vh;
@@ -801,6 +882,29 @@
   const Styles = {
     inject() {
       GM_addStyle(`
+    /* ===== 主题调色板：:root 为夜间默认值，body.ark-theme-light 覆盖为日间值 ===== */
+    :root {
+      --ark-surface: #1a1a1a;
+      --ark-elevated: #222;
+      --ark-input: #2a2a2a;
+      --ark-chip: #333;
+      --ark-border: #333;
+      --ark-border-2: #444;
+      --ark-btn-2: #555;
+      --ark-btn-2-hover: #666;
+      --ark-text: #f0f0f0;
+      --ark-text-strong: #ffffff;
+      --ark-label: #cccccc;
+      --ark-muted: #888;
+      --ark-accent: #89b4fa;
+      --ark-accent-2: #6ab0f3;
+      --ark-shadow: rgba(0,0,0,0.5);
+      --ark-overlay: rgba(26,26,26,0.8);
+      --ark-tooltip-bg: rgba(26,26,26,0.9);
+      --ark-popup-bg: rgba(26,26,26,0.95);
+      --ark-popup-item: rgba(255,255,255,0.05);
+    }
+
     @keyframes pricePulse {
       from { transform: scale(1); text-shadow: 0 0 0 transparent; }
       to { transform: scale(1.15); text-shadow: 0 0 10px currentColor; }
@@ -906,17 +1010,27 @@
     #ark-stock-panel .panel-header .data-maintenance-btn {
       background: none;
       border: none;
-      color: #888;
+      color: var(--ark-muted);
       font-size: 16px;
       cursor: pointer;
       padding: 0;
       line-height: 1;
     }
     #ark-stock-panel .panel-header .data-maintenance-btn:hover { color: #89b4fa; }
+    #ark-stock-panel .panel-header .theme-toggle-btn {
+      background: none;
+      border: none;
+      color: var(--ark-muted);
+      font-size: 15px;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+    #ark-stock-panel .panel-header .theme-toggle-btn:hover { color: #89b4fa; }
     #ark-stock-panel .panel-header .settings-btn {
       background: none;
       border: none;
-      color: #888;
+      color: var(--ark-muted);
       font-size: 16px;
       cursor: pointer;
       padding: 0;
@@ -1202,7 +1316,7 @@
     .ark-positions-last-update {
       margin-bottom: 10px;
       font-size: 12px;
-      color: #888;
+      color: var(--ark-muted);
     }
 
     #ark-arbitrage-panel {
@@ -1299,7 +1413,7 @@
       padding: 8px 10px;
       text-align: center;
       font-weight: 600;
-      color: #cccccc;
+      color: var(--ark-label);
       border-bottom: 1px solid #444;
       position: sticky;
       top: 0;
@@ -1357,7 +1471,7 @@
     }
     .ark-last-update {
       font-size: 12px;
-      color: #888;
+      color: var(--ark-muted);
       font-style: italic;
     }
     .ark-user-id {
@@ -1557,7 +1671,7 @@
     }
 
     .ark-empty-hint {
-      color: #888;
+      color: var(--ark-muted);
       font-size: 12px;
       text-align: center;
       padding: 12px;
@@ -1630,6 +1744,20 @@
       min-height: 400px;
     }
 
+    .ark-chart-tooltip {
+      position: absolute;
+      display: none;
+      padding: 8px 12px;
+      background: var(--ark-tooltip-bg);
+      border: 1px solid var(--ark-border);
+      border-radius: 6px;
+      color: var(--ark-text);
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 1000;
+      backdrop-filter: blur(4px);
+    }
+
     .ark-price-table th a.model-chart-link {
       color: #f0f0f0;
       text-decoration: none;
@@ -1691,7 +1819,7 @@
     .ark-model-toggle-btn {
       background: none;
       border: none;
-      color: #888;
+      color: var(--ark-muted);
       cursor: pointer;
       font-size: 12px;
       padding: 0 4px;
@@ -1762,7 +1890,7 @@
       padding: 12px;
       text-align: center;
       font-size: 12px;
-      color: #888;
+      color: var(--ark-muted);
     }
     .ark-model-error { color: #ff6b6b; }
     .ark-model-error button {
@@ -1871,7 +1999,7 @@
     .ark-trades-refresh-btn:disabled { background: #555; cursor: not-allowed; }
     .ark-trades-last-update {
       font-size: 12px;
-      color: #888;
+      color: var(--ark-muted);
       font-style: italic;
       margin-bottom: 8px;
     }
@@ -1880,7 +2008,7 @@
     .ark-refresh-btn {
       background: none;
       border: none;
-      color: #cccccc;
+      color: var(--ark-label);
       font-size: 16px;
       cursor: pointer;
       margin-right: 8px;
@@ -1906,6 +2034,206 @@
     @keyframes spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
+    }
+
+    /* ============================================================
+       日间（浅色）主题覆盖
+       - 仅在 body.ark-theme-light 下生效，夜间完全不受影响
+       - 选择器均锚定本脚本的 ID / 命名空间类，避免影响宿主页面
+       - 语义色（红跌绿涨、持仓紫、买卖标记、高低/成本线）刻意保留
+       ============================================================ */
+    body.ark-theme-light {
+      --ark-surface: #ffffff;
+      --ark-elevated: #f1f3f5;
+      --ark-input: #ffffff;
+      --ark-chip: #e9ecef;
+      --ark-border: #e2e5e9;
+      --ark-border-2: #ced4da;
+      --ark-btn-2: #e9ecef;
+      --ark-btn-2-hover: #dde1e6;
+      --ark-text: #1f2933;
+      --ark-text-strong: #0b1220;
+      --ark-label: #5a6066;
+      --ark-muted: #6c757d;
+      --ark-accent: #1c7ed6;
+      --ark-accent-2: #1971c2;
+      --ark-shadow: rgba(0,0,0,0.15);
+      --ark-overlay: rgba(255,255,255,0.7);
+      --ark-tooltip-bg: rgba(255,255,255,0.95);
+      --ark-popup-bg: rgba(255,255,255,0.97);
+      --ark-popup-item: rgba(0,0,0,0.04);
+    }
+
+    /* 面板容器 */
+    body.ark-theme-light #ark-stock-panel,
+    body.ark-theme-light #ark-settings-panel,
+    body.ark-theme-light #ark-data-maintenance-panel,
+    body.ark-theme-light #ark-price-panel,
+    body.ark-theme-light #ark-trades-panel,
+    body.ark-theme-light #ark-positions-panel,
+    body.ark-theme-light #ark-arbitrage-panel,
+    body.ark-theme-light .ark-chart-panel {
+      background: var(--ark-surface);
+      color: var(--ark-text);
+      border-color: var(--ark-border);
+      box-shadow: 0 8px 32px var(--ark-shadow);
+    }
+
+    /* 标题栏 */
+    body.ark-theme-light #ark-stock-panel .panel-header,
+    body.ark-theme-light #ark-settings-panel .panel-header,
+    body.ark-theme-light #ark-data-maintenance-panel .panel-header,
+    body.ark-theme-light #ark-price-panel .panel-header,
+    body.ark-theme-light #ark-trades-panel .panel-header,
+    body.ark-theme-light #ark-positions-panel .panel-header,
+    body.ark-theme-light #ark-arbitrage-panel .panel-header,
+    body.ark-theme-light .ark-chart-panel .chart-header {
+      background: var(--ark-elevated);
+      border-bottom-color: var(--ark-border);
+    }
+
+    /* 正文区 */
+    body.ark-theme-light #ark-stock-panel .panel-body,
+    body.ark-theme-light #ark-settings-panel .panel-body,
+    body.ark-theme-light #ark-data-maintenance-panel .panel-body,
+    body.ark-theme-light #ark-price-panel .panel-body,
+    body.ark-theme-light #ark-trades-panel .panel-body,
+    body.ark-theme-light #ark-positions-panel .panel-body,
+    body.ark-theme-light #ark-arbitrage-panel .panel-body {
+      background: var(--ark-surface);
+    }
+
+    /* 标题文字 */
+    body.ark-theme-light #ark-stock-panel .panel-header .title,
+    body.ark-theme-light #ark-settings-panel .panel-header .title,
+    body.ark-theme-light #ark-data-maintenance-panel .panel-header .title,
+    body.ark-theme-light #ark-price-panel .panel-header .title,
+    body.ark-theme-light #ark-trades-panel .panel-header .title,
+    body.ark-theme-light #ark-positions-panel .panel-header .title,
+    body.ark-theme-light #ark-arbitrage-panel .panel-header .title,
+    body.ark-theme-light .ark-chart-panel .chart-header .chart-title {
+      color: var(--ark-text);
+    }
+
+    /* 区块卡片 */
+    body.ark-theme-light .ark-section {
+      background: var(--ark-elevated);
+      border-color: var(--ark-border);
+    }
+    body.ark-theme-light .ark-section-label {
+      color: var(--ark-text-strong);
+      border-bottom-color: var(--ark-border-2);
+    }
+
+    /* 用户ID / chips */
+    body.ark-theme-light .ark-user-id {
+      background: var(--ark-elevated);
+      color: var(--ark-accent-2);
+    }
+    body.ark-theme-light .ark-model-tag,
+    body.ark-theme-light .ark-model-selected-tag {
+      background: var(--ark-chip);
+      color: var(--ark-text);
+    }
+
+    /* 行情入口链接 */
+    body.ark-theme-light .ark-latest-price-link,
+    body.ark-theme-light .ark-historical-trades-link,
+    body.ark-theme-light .ark-arbitrage-link,
+    body.ark-theme-light .ark-positions-link {
+      color: var(--ark-accent);
+    }
+
+    /* 表格 */
+    body.ark-theme-light .ark-price-table th,
+    body.ark-theme-light .ark-price-table td,
+    body.ark-theme-light .ark-trades-table th,
+    body.ark-theme-light .ark-trades-table td,
+    body.ark-theme-light .ark-positions-table th,
+    body.ark-theme-light .ark-positions-table td {
+      border-color: var(--ark-border);
+    }
+    body.ark-theme-light .ark-price-table th,
+    body.ark-theme-light .ark-trades-table th,
+    body.ark-theme-light .ark-positions-table th {
+      background: var(--ark-elevated);
+      color: var(--ark-text);
+    }
+    body.ark-theme-light .ark-price-table th a.model-chart-link {
+      color: var(--ark-text);
+    }
+    body.ark-theme-light .ark-arbitrage-table th {
+      background: var(--ark-elevated);
+      color: var(--ark-muted);
+      border-bottom-color: var(--ark-border-2);
+    }
+    body.ark-theme-light .ark-arbitrage-table td {
+      border-bottom-color: var(--ark-border);
+    }
+    body.ark-theme-light .ark-arbitrage-table tr:nth-child(even) td {
+      background: var(--ark-elevated);
+    }
+    body.ark-theme-light .ark-arbitrage-table tr:hover td {
+      background: var(--ark-chip);
+    }
+
+    /* 表单：输入框 / 下拉框 */
+    body.ark-theme-light .ark-minute-input,
+    body.ark-theme-light .ark-model-input-row input,
+    body.ark-theme-light .ark-trades-model-select,
+    body.ark-theme-light .ark-arbitrage-sort-select,
+    body.ark-theme-light .ark-model-selector-input,
+    body.ark-theme-light .ark-model-dropdown,
+    body.ark-theme-light .ark-model-dropdown-search {
+      background: var(--ark-input);
+      color: var(--ark-text);
+      border-color: var(--ark-border-2);
+    }
+    body.ark-theme-light .ark-model-search-input,
+    body.ark-theme-light .ark-model-option-label {
+      color: var(--ark-text);
+    }
+    body.ark-theme-light .ark-model-dropdown-header,
+    body.ark-theme-light .ark-model-actions {
+      border-color: var(--ark-border-2);
+    }
+    body.ark-theme-light .ark-model-option {
+      border-bottom-color: var(--ark-border);
+    }
+    body.ark-theme-light .ark-model-option:hover {
+      background: var(--ark-elevated);
+    }
+
+    /* 表单：次级按钮 */
+    body.ark-theme-light .ark-model-dropdown-header button,
+    body.ark-theme-light .ark-model-clear-btn,
+    body.ark-theme-light .ark-model-error button {
+      background: var(--ark-btn-2);
+      color: var(--ark-text);
+    }
+    body.ark-theme-light .ark-model-dropdown-header button:hover,
+    body.ark-theme-light .ark-model-clear-btn:hover,
+    body.ark-theme-light .ark-model-error button:hover {
+      background: var(--ark-btn-2-hover);
+    }
+    body.ark-theme-light .ark-trades-refresh-btn:disabled {
+      background: var(--ark-btn-2);
+    }
+
+    /* 开关关闭态 */
+    body.ark-theme-light .ark-toggle .slider {
+      background: var(--ark-border-2);
+    }
+
+    /* 图表面板：tooltip / loading 遮罩 */
+    body.ark-theme-light .chart-loading-overlay {
+      background: var(--ark-overlay);
+    }
+
+    /* 刷新按钮悬停（夜间用白字/白底，日间需反转） */
+    body.ark-theme-light .ark-refresh-btn:hover {
+      background-color: rgba(0,0,0,0.06);
+      color: var(--ark-text);
     }
   `);
     },
@@ -2032,7 +2360,8 @@
         }));
     },
 
-    createDarkThemeChart(container) {
+    createThemedChart(container) {
+      const c = Theme.chartColors(Theme.current());
       container.style.cssText = `
         display: block !important;
         visibility: visible !important;
@@ -2054,15 +2383,15 @@
       const grandParent = parent?.parentElement;
       if (grandParent) {
         grandParent.style.cssText = `
-          background: #1a1a1a !important;
-          color: #f0f0f0 !important;
-          border: 1px solid #333 !important;
+          background: var(--ark-surface) !important;
+          color: var(--ark-text) !important;
+          border: 1px solid var(--ark-border) !important;
           border-radius: 10px !important;
           z-index: 100000 !important;
           display: flex !important;
           flex-direction: column !important;
           overflow: hidden !important;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.7) !important;
+          box-shadow: 0 8px 32px var(--ark-shadow) !important;
         `;
       }
 
@@ -2070,16 +2399,16 @@
         requestAnimationFrame(() => {
           const chart = LightweightCharts.createChart(container, {
             layout: {
-              background: { type: "solid", color: "#1a1a1a" },
-              textColor: "#d1d4dc",
+              background: { type: "solid", color: c.bg },
+              textColor: c.text,
             },
             grid: {
-              vertLines: { color: "#2b2b43" },
-              horzLines: { color: "#2b2b43" },
+              vertLines: { color: c.grid },
+              horzLines: { color: c.grid },
             },
             crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
             rightPriceScale: {
-              borderColor: "#2b2b43",
+              borderColor: c.scaleBorder,
               scaleMargins: { top: 0.1, bottom: 0.1 },
             },
             localization: {
@@ -2092,7 +2421,7 @@
               },
             },
             timeScale: {
-              borderColor: "#2b2b43",
+              borderColor: c.scaleBorder,
               timeVisible: true,
               secondsVisible: true,
               fixLeftEdge: true,
@@ -2118,13 +2447,14 @@
     },
 
     createPriceLineSeries(chart, data) {
+      const c = Theme.chartColors(Theme.current());
       const series = chart.addLineSeries({
-        color: "#4dabf7",
+        color: c.line,
         lineWidth: 2,
         crosshairMarkerVisible: true,
         crosshairMarkerRadius: 4,
         crosshairMarkerBorderColor: "#ffffff",
-        crosshairMarkerBackgroundColor: "#4dabf7",
+        crosshairMarkerBackgroundColor: c.line,
         lastPriceAnimation: 1,
       });
       if (data && data.length > 0) series.setData(data);
@@ -2134,19 +2464,7 @@
     createChartTooltip(container, chart, series) {
       const tooltip = document.createElement("div");
       tooltip.id = "ark-chart-tooltip";
-      tooltip.style.cssText = `
-        position: absolute;
-        display: none;
-        padding: 8px 12px;
-        background: rgba(26, 26, 26, 0.9);
-        border: 1px solid #333;
-        border-radius: 6px;
-        color: #f0f0f0;
-        font-size: 12px;
-        pointer-events: none;
-        z-index: 1000;
-        backdrop-filter: blur(4px);
-      `;
+      tooltip.className = "ark-chart-tooltip";
       container.appendChild(tooltip);
 
       chart.subscribeCrosshairMove((param) => {
@@ -2192,7 +2510,7 @@
         </div>
         <div class="chart-body">
           <div id="${panelId}-container" class="ark-chart-container"></div>
-          <div id="${panelId}-stats" class="ark-chart-stats" style="margin-top: 16px; font-size: 12px; color: #888;"></div>
+          <div id="${panelId}-stats" class="ark-chart-stats" style="margin-top: 16px; font-size: 12px; color: var(--ark-muted);"></div>
           <div id="${panelId}-error" class="ark-chart-error" style="display: none;"></div>
         </div>
         <div class="resize-handle resize-handle-n"></div>
@@ -2417,7 +2735,7 @@
         const chartData = Chart.convertToChartData(modelData);
         if (chartData.length === 0) throw new Error("数据转换失败");
 
-        const chart = await Chart.createDarkThemeChart(container);
+        const chart = await Chart.createThemedChart(container);
         const series = Chart.createPriceLineSeries(chart, chartData);
 
         const { stats, priceLines } = this._updateChartSeriesData(
@@ -2706,9 +3024,10 @@
         <div class="panel-header">
           <div class="header-left">
             <span class="title">Ark API 模型股市监控</span>
-            <span style="color:#cccccc;font-size:12px;"> ver ${GM_info.script.version}</span>
+            <span style="color:var(--ark-label);font-size:12px;"> ver ${GM_info.script.version}</span>
           </div>
           <div class="header-right">
+            <button class="theme-toggle-btn" id="ark-theme-toggle-btn" title="${data.theme === "light" ? "切换到夜间主题" : "切换到日间主题"}">${data.theme === "light" ? "&#x2600;" : "&#x1F319;"}</button>
             <button class="data-maintenance-btn" id="ark-data-maintenance-btn" title="数据维护">&#x26C1;</button>
             <button class="settings-btn" id="ark-settings-btn" title="设置">&#x2699;</button>
             <button class="close-btn" title="关闭">&times;</button>
@@ -2785,6 +3104,12 @@
               UIPanels.createDataMaintenancePanel();
           }
           UIPanels._dataMaintenancePanel.classList.toggle("visible");
+        });
+
+      this._mainPanel
+        .querySelector("#ark-theme-toggle-btn")
+        .addEventListener("click", () => {
+          Theme.toggle();
         });
 
       this._mainPanel
@@ -3106,7 +3431,7 @@
           <div class="ark-section">
             <div class="ark-section-label">定时获取</div>
             <div class="ark-trigger-row">
-              <span style="color:#cccccc;font-size:12px;">启用：</span>
+              <span style="color:var(--ark-label);font-size:12px;">启用：</span>
               <label class="ark-toggle">
                 <input type="checkbox" id="ark-auto-toggle" />
                 <span class="slider"></span>
@@ -3114,7 +3439,7 @@
               <button class="ark-manual-btn" id="ark-fetch-btn">手动获取</button>
             </div>
             <div class="ark-trigger-row">
-              <span style="color:#cccccc;font-size:12px;">匹配分钟尾数：</span>
+              <span style="color:var(--ark-label);font-size:12px;">匹配分钟尾数：</span>
               <input type="text" class="ark-minute-input" id="ark-minute-ends" placeholder="如 3,8" title="如填 3,8 代表每小时的 03、08、13、18...分钟，会自动触发行情获取" />
               <button class="ark-save-btn" id="ark-save-minute-btn">保存</button>
             </div>
@@ -3126,21 +3451,21 @@
               <button class="ark-manual-btn" id="ark-test-notif-btn">测试已打开的提醒</button>
             </div>
             <div class="ark-trigger-row">
-              <span style="color:#cccccc;font-size:12px;">开启浏览器弹窗提醒：</span>
+              <span style="color:var(--ark-label);font-size:12px;">开启浏览器弹窗提醒：</span>
               <label class="ark-toggle">
                 <input type="checkbox" id="ark-notif-popup-toggle" />
                 <span class="slider"></span>
               </label>
             </div>
             <div class="ark-trigger-row">
-              <span style="color:#cccccc;font-size:12px;">开启提示音：</span>
+              <span style="color:var(--ark-label);font-size:12px;">开启提示音：</span>
               <label class="ark-toggle">
                 <input type="checkbox" id="ark-notif-sound-toggle" />
                 <span class="slider"></span>
               </label>
             </div>
             <div class="ark-trigger-row">
-              <span style="color:#cccccc;font-size:12px;">开启 Telegram 提醒：</span>
+              <span style="color:var(--ark-label);font-size:12px;">开启 Telegram 提醒：</span>
               <label class="ark-toggle">
                 <input type="checkbox" id="ark-notif-telegram-toggle" />
                 <span class="slider"></span>
@@ -3148,26 +3473,26 @@
             </div>
             <div id="ark-telegram-config" style="display:none; margin-top: 10px;">
               <div class="ark-trigger-row">
-                <span style="color:#cccccc;font-size:12px;width:80px;">Bot Token：</span>
+                <span style="color:var(--ark-label);font-size:12px;width:80px;">Bot Token：</span>
                 <input type="text" class="ark-minute-input" id="ark-telegram-token" placeholder="请输入 Token" style="width: 320px;" />
               </div>
               <div class="ark-trigger-row">
-                <span style="color:#cccccc;font-size:12px;width:80px;">Chat ID：</span>
+                <span style="color:var(--ark-label);font-size:12px;width:80px;">Chat ID：</span>
                 <input type="text" class="ark-minute-input" id="ark-telegram-chatid" placeholder="请输入 Chat ID" style="width: 320px;" />
               </div>
             </div>
-            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;">
-              <div class="ark-section-label" style="font-size: 11px; color: #888; border-bottom: none; margin-bottom: 6px;">添加模型价格突破提醒</div>
+            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ark-border-2);">
+              <div class="ark-section-label" style="font-size: 11px; color: var(--ark-muted); border-bottom: none; margin-bottom: 6px;">添加模型价格突破提醒</div>
               <div class="ark-trigger-row">
-                <span style="color:#cccccc;font-size:12px;">模型：</span>
-                <select id="ark-notif-model-select" class="ark-minute-input" style="width: 300px; background: #2a2a2a; border: 1px solid #444; color: #f0f0f0; padding: 5px 10px; border-radius: 6px;">
+                <span style="color:var(--ark-label);font-size:12px;">模型：</span>
+                <select id="ark-notif-model-select" class="ark-minute-input" style="width: 300px; background: var(--ark-input); border: 1px solid var(--ark-border-2); color: var(--ark-text); padding: 5px 10px; border-radius: 6px;">
                   <option value="">请选择模型</option>
                 </select>
               </div>
               <div class="ark-trigger-row">
-                <span style="color:#cccccc;font-size:12px;">向上突破：</span>
+                <span style="color:var(--ark-label);font-size:12px;">向上突破：</span>
                 <input type="number" class="ark-minute-input" id="ark-notif-upper" style="width: 80px;" min="0" step="1" />
-                <span style="color:#cccccc;font-size:12px; margin-left: 10px;">向下突破：</span>
+                <span style="color:var(--ark-label);font-size:12px; margin-left: 10px;">向下突破：</span>
                 <input type="number" class="ark-minute-input" id="ark-notif-lower" style="width: 80px;" min="0" step="1" />
                 <button class="ark-save-btn" id="ark-save-notif-btn" style="margin-left: 10px;">添加</button>
               </div>
@@ -3325,7 +3650,7 @@
 
         if (keys.length === 0) {
           notifList.innerHTML =
-            '<div style="color:#888;font-size:12px;text-align:center;">暂无提醒设置</div>';
+            '<div style="color:var(--ark-muted);font-size:12px;text-align:center;">暂无提醒设置</div>';
           return;
         }
 
@@ -3341,10 +3666,10 @@
                 ? config.lowerLimit
                 : "-";
             return `
-          <div style="display:flex;align-items:center;padding:6px 8px;background:#2a2a2a;border-radius:4px;margin-bottom:4px;">
-            <span style="color:#f0f0f0;font-size:12px;flex-shrink:0;margin-right:auto;">${Utils.escapeHtml(model)}</span>
-            <span style="color:#888;font-size:11px;width:100px;text-align:left;">向上突破：${upper}</span>
-            <span style="color:#888;font-size:11px;width:100px;text-align:left;">向下突破：${lower}</span>
+          <div style="display:flex;align-items:center;padding:6px 8px;background:var(--ark-input);border:1px solid var(--ark-border);border-radius:4px;margin-bottom:4px;">
+            <span style="color:var(--ark-text);font-size:12px;flex-shrink:0;margin-right:auto;">${Utils.escapeHtml(model)}</span>
+            <span style="color:var(--ark-muted);font-size:11px;width:100px;text-align:left;">向上突破：${upper}</span>
+            <span style="color:var(--ark-muted);font-size:11px;width:100px;text-align:left;">向下突破：${lower}</span>
             <button class="del-btn" data-model="${Utils.escapeHtml(model)}" title="删除" style="background:none;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;padding:0 4px;margin-left:8px;flex-shrink:0;">&times;</button>
           </div>
         `;
@@ -3434,20 +3759,20 @@
           <div class="ark-section">
             <div class="ark-section-label">数据清理</div>
             <div class="ark-trigger-row">
-              <span style="color:#cccccc;font-size:12px;">价格数据保留天数：</span>
+              <span style="color:var(--ark-label);font-size:12px;">价格数据保留天数：</span>
               <input type="number" class="ark-minute-input" id="ark-price-days-limit"
                      placeholder="天数" min="1" step="1" value="${data.priceDataDaysLimit}"
                      style="width: 80px;" />
               <button class="ark-save-btn" id="ark-save-price-days-btn">保存</button>
             </div>
-            <div style="margin-top: 8px; font-size: 11px; color: #888;">
+            <div style="margin-top: 8px; font-size: 11px; color: var(--ark-muted);">
               注：设置后不会立即清理，待第二天第一次获取数据时才自动清理超出时间范围的数据
             </div>
           </div>
 
           <div class="ark-section">
             <div class="ark-section-label">数据同步</div>
-            <div style="color:#888;font-size:12px;padding:10px;text-align:center;">
+            <div style="color:var(--ark-muted);font-size:12px;padding:10px;text-align:center;">
               功能开发中，敬请期待...
             </div>
           </div>
@@ -3510,7 +3835,7 @@
 
       this._pricePanel.innerHTML = `
         <div class="panel-header">
-          <span class="title">最新价格<span style="color:#cccccc;font-size:12px;">（最近 ${CONFIG.TABLE_DISPLAY_LIMIT} 条）</span></span>
+          <span class="title">最新价格<span style="color:var(--ark-label);font-size:12px;">（最近 ${CONFIG.TABLE_DISPLAY_LIMIT} 条）</span></span>
           <button class="close-btn" title="关闭">&times;</button>
         </div>
         <div class="panel-body">
@@ -3518,11 +3843,11 @@
             <div class="ark-section-header" style="justify-content: space-between;">
               <div style="display: flex; align-items: center;">
                 <button class="ark-refresh-btn" id="ark-price-refresh-btn" title="手动刷新数据">↻</button>
-                <div class="ark-last-update"><span style="color:#cccccc;font-size:12px;">最近更新：</span><span id="ark-last-update-time-price" style="white-space: nowrap;">从未更新</span></div>
+                <div class="ark-last-update"><span style="color:var(--ark-label);font-size:12px;">最近更新：</span><span id="ark-last-update-time-price" style="white-space: nowrap;">从未更新</span></div>
               </div>
               <div style="display: flex; gap: 12px; font-size: 12px;">
-                <div><span style="color:#cccccc;">可用余额：</span><span style="color:#4caf50;font-weight:600;" id="ark-user-quota">-</span></div>
-                <div><span style="color:#cccccc;">持仓总值：</span><span style="color:#89b4fa;font-weight:600;cursor:pointer;" id="ark-holdings-total" title="点击查看我的持仓">-</span></div>
+                <div><span style="color:var(--ark-label);">可用余额：</span><span style="color:#4caf50;font-weight:600;" id="ark-user-quota">-</span></div>
+                <div><span style="color:var(--ark-label);">持仓总值：</span><span style="color:var(--ark-accent);font-weight:600;cursor:pointer;" id="ark-holdings-total" title="点击查看我的持仓">-</span></div>
               </div>
             </div>
             <div class="ark-table-wrap" id="ark-price-table-wrap">
@@ -3735,19 +4060,19 @@
         <div class="panel-body">
           <div class="ark-arbitrage-controls">
             <div class="ark-last-update">
-              <span style="color:#cccccc;font-size:12px;">最近更新：</span>
+              <span style="color:var(--ark-label);font-size:12px;">最近更新：</span>
               <span id="ark-arbitrage-last-update-time">${data.lastUpdateTime ? TimeUtils.formatDateTime(data.lastUpdateTime, "full") : "从未更新"}</span>
             </div>
             <div style="display:flex;gap:10px;">
               <div class="ark-arbitrage-date-wrapper">
-                <span style="color:#cccccc;font-size:12px;">日期：</span>
+                <span style="color:var(--ark-label);font-size:12px;">日期：</span>
                 <select class="ark-arbitrage-sort-select" id="ark-arbitrage-date-select">
                   <option value="today">今日</option>
                   <option value="yesterday">昨日</option>
                 </select>
               </div>
               <div class="ark-arbitrage-sort-wrapper">
-                <span style="color:#cccccc;font-size:12px;">排序字段：</span>
+                <span style="color:var(--ark-label);font-size:12px;">排序字段：</span>
                 <select class="ark-arbitrage-sort-select" id="ark-arbitrage-sort-select">
                   <option value="arbitrage_diff">每股套利价差</option>
                   <option value="arbitrage_percent">每股套利幅度</option>
@@ -3979,10 +4304,10 @@
       }
       html += "</tbody></table>";
       html += `
-        <div style="margin-top: 8px; font-size: 11px; color: #888; text-align: left; padding: 0 4px;">
+        <div style="margin-top: 8px; font-size: 11px; color: var(--ark-muted); text-align: left; padding: 0 4px;">
           注1 : <span style="color:#F55454">红字</span>表示较前一时刻价格下跌，<span style="color:#00A854">绿字</span>表示较前一时刻价格上涨
         </div>
-        <div style="margin-top: 8px; font-size: 11px; color: #888; text-align: left; padding: 0 4px;">
+        <div style="margin-top: 8px; font-size: 11px; color: var(--ark-muted); text-align: left; padding: 0 4px;">
           注2 : 点击表头模型名称查看分时图，名称为<span style="color:#a855f7">紫色</span>表示有持仓，名称前的🔒表示持仓锁定中
         </div>
       `;
@@ -4577,8 +4902,9 @@
   // ==================== 启动 ====================
   Styles.inject();
 
-  // 脚本加载时自动启动定时调度（如果已开启自动获取）
+  // 脚本加载时应用已保存主题、自动启动定时调度（如果已开启自动获取）
   const initialData = Storage.load();
+  Theme.apply(initialData.theme);
   if (initialData.autoTrigger) {
     Scheduler.start();
   }
