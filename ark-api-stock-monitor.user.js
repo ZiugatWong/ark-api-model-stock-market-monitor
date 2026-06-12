@@ -360,8 +360,37 @@
 
       // 提取持仓数据（仅保留最新，不保留历史）
       if (response.data.positions) {
+        // 构建全模型现价映射表（持仓模型可能未被监控，需从完整 stocks 中取价）
+        const priceMap = {};
+        for (const stock of stocks) {
+          priceMap[stock.model_name] = stock.current_price;
+        }
+
+        const round2 = (n) => parseFloat(n.toFixed(2));
+
         data.positions = {};
         for (const pos of response.data.positions) {
+          const currentPrice = priceMap[pos.model_name];
+          // 现价：取接口最新价格
+          pos.current_price =
+            currentPrice !== undefined ? round2(currentPrice) : null;
+          // 含费成本：持仓均价 * 份额 * 1.02
+          pos.cost_with_fee = round2(pos.avg_cost * pos.shares * 1.02);
+          if (pos.current_price !== null) {
+            // 费后收入：现价 * 份额 * 0.975
+            pos.income_after_fee = round2(currentPrice * pos.shares * 0.975);
+            // 实际盈亏：费后收入 - 含费成本（带正负号）
+            pos.actual_pnl = round2(pos.income_after_fee - pos.cost_with_fee);
+            // 盈亏幅度：实际盈亏 / 含费成本，转为带正负号的百分比
+            pos.pnl_percent =
+              pos.cost_with_fee !== 0
+                ? round2((pos.actual_pnl / pos.cost_with_fee) * 100)
+                : 0;
+          } else {
+            pos.income_after_fee = null;
+            pos.actual_pnl = null;
+            pos.pnl_percent = null;
+          }
           data.positions[pos.model_name] = pos;
         }
       }
@@ -1121,8 +1150,8 @@
       top: 60px;
       right: 540px;
       width: max-content;
-      max-width: 600px;
-      min-width: 500px;
+      max-width: 980px;
+      min-width: 860px;
       max-height: 80vh;
       background: #1a1a1a;
       color: #f0f0f0;
@@ -3658,8 +3687,13 @@
                 <thead>
                   <tr>
                     <th>模型</th>
-                    <th>持仓股数</th>
-                    <th>持仓均价</th>
+                    <th>股数</th>
+                    <th>成本价</th>
+                    <th>现价</th>
+                    <th title="成本价 × 份额 × 1.02">含费成本</th>
+                    <th title="现价 × 份额 × 0.975">费后收入</th>
+                    <th title="费后收入 - 含费成本">实际盈亏</th>
+                    <th title="实际盈亏 / 含费成本">盈亏幅度</th>
                     <th>解锁时间</th>
                     <th>解锁状态</th>
                   </tr>
@@ -4140,11 +4174,17 @@
 
       if (modelNames.length === 0) {
         tbody.innerHTML =
-          '<tr><td colspan="5" style="text-align:center">暂无持仓数据</td></tr>';
+          '<tr><td colspan="10" style="text-align:center">暂无持仓数据</td></tr>';
         return;
       }
 
       const now = Math.floor(Date.now() / 1000);
+
+      // 盈亏值的颜色（正绿、负红、零灰）与正负号格式化
+      const pnlColor = (n) =>
+        n > 0 ? "#22c55e" : n < 0 ? "#ef4444" : "#cccccc";
+      const fmtSigned = (n, suffix = "") =>
+        `${n > 0 ? "+" : ""}${n.toFixed(2)}${suffix}`;
 
       for (const modelName of modelNames) {
         const pos = positions[modelName];
@@ -4153,11 +4193,37 @@
           ? '<span style="color:#22c55e">已解锁</span>'
           : '<span style="color:#ef4444">锁定中</span>';
 
+        const currentPriceHtml =
+          pos.current_price !== null && pos.current_price !== undefined
+            ? `<span style="color:${pos.current_price >= pos.avg_cost ? "#22c55e" : "#ef4444"}">${pos.current_price.toFixed(2)}</span>`
+            : "-";
+        const costHtml =
+          pos.cost_with_fee !== null && pos.cost_with_fee !== undefined
+            ? pos.cost_with_fee.toFixed(2)
+            : "-";
+        const incomeHtml =
+          pos.income_after_fee !== null && pos.income_after_fee !== undefined
+            ? pos.income_after_fee.toFixed(2)
+            : "-";
+        const pnlHtml =
+          pos.actual_pnl !== null && pos.actual_pnl !== undefined
+            ? `<span style="color:${pnlColor(pos.actual_pnl)}">${fmtSigned(pos.actual_pnl)}</span>`
+            : "-";
+        const pnlPctHtml =
+          pos.pnl_percent !== null && pos.pnl_percent !== undefined
+            ? `<span style="color:${pnlColor(pos.pnl_percent)}">${fmtSigned(pos.pnl_percent, "%")}</span>`
+            : "-";
+
         const row = `
           <tr>
             <td>${Utils.escapeHtml(pos.model_name)}</td>
             <td>${pos.shares}</td>
             <td>${pos.avg_cost.toFixed(2)}</td>
+            <td>${currentPriceHtml}</td>
+            <td>${costHtml}</td>
+            <td>${incomeHtml}</td>
+            <td>${pnlHtml}</td>
+            <td>${pnlPctHtml}</td>
             <td>${TimeUtils.formatSecondsTimestamp(pos.locked_until, "full")}</td>
             <td>${statusHtml}</td>
           </tr>
