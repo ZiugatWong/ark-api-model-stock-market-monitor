@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ark API 模型股市监控
 // @namespace    http://tampermonkey.net/
-// @version      1.1.0
+// @version      1.0.0
 // @description  监控 Ark API 模型股市价格
 // @match        https://windhub.cc/*
 // @match        https://test-fast.windhub.cc/*
@@ -2223,6 +2223,11 @@
     /* 开关关闭态 */
     body.ark-theme-light .ark-toggle .slider {
       background: var(--ark-border-2);
+    }
+
+    /* 开关打开态 */
+    body.ark-theme-light .ark-toggle input:checked + .slider { 
+      background: #4caf50; 
     }
 
     /* 图表面板：tooltip / loading 遮罩 */
