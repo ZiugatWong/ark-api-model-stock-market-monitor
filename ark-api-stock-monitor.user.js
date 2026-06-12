@@ -1150,8 +1150,8 @@
       top: 60px;
       right: 540px;
       width: max-content;
-      max-width: 980px;
-      min-width: 860px;
+      max-width: 900px;
+      min-width: 760px;
       max-height: 80vh;
       background: #1a1a1a;
       color: #f0f0f0;
@@ -3694,8 +3694,7 @@
                     <th title="现价 × 份额 × 0.975">费后收入</th>
                     <th title="费后收入 - 含费成本">实际盈亏</th>
                     <th title="实际盈亏 / 含费成本">盈亏幅度</th>
-                    <th>解锁时间</th>
-                    <th>解锁状态</th>
+                    <th title="红色表示未解锁，绿色表示已解锁">解锁时间</th>
                   </tr>
                 </thead>
                 <tbody id="ark-positions-tbody">
@@ -4174,7 +4173,7 @@
 
       if (modelNames.length === 0) {
         tbody.innerHTML =
-          '<tr><td colspan="10" style="text-align:center">暂无持仓数据</td></tr>';
+          '<tr><td colspan="9" style="text-align:center">暂无持仓数据</td></tr>';
         return;
       }
 
@@ -4189,9 +4188,7 @@
       for (const modelName of modelNames) {
         const pos = positions[modelName];
         const isUnlocked = pos.locked_until < now;
-        const statusHtml = isUnlocked
-          ? '<span style="color:#22c55e">已解锁</span>'
-          : '<span style="color:#ef4444">锁定中</span>';
+        const unlockTimeColor = isUnlocked ? "#22c55e" : "#ef4444";
 
         const currentPriceHtml =
           pos.current_price !== null && pos.current_price !== undefined
@@ -4224,8 +4221,7 @@
             <td>${incomeHtml}</td>
             <td>${pnlHtml}</td>
             <td>${pnlPctHtml}</td>
-            <td>${TimeUtils.formatSecondsTimestamp(pos.locked_until, "full")}</td>
-            <td>${statusHtml}</td>
+            <td><span style="color:${unlockTimeColor}">${TimeUtils.formatSecondsTimestamp(pos.locked_until, "full")}</span></td>
           </tr>
         `;
         tbody.innerHTML += row;
