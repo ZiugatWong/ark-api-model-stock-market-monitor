@@ -239,6 +239,21 @@
     getCurrentSecondsTimestamp() {
       return Math.floor(Date.now() / 1000);
     },
+
+    calculateStorageSize() {
+      const data = Storage.load();
+      const jsonString = JSON.stringify(data);
+      const sizeInBytes = new Blob([jsonString]).size;
+
+      // 格式化展示
+      if (sizeInBytes < 1024) {
+        return `${sizeInBytes} B`;
+      } else if (sizeInBytes < 1024 * 1024) {
+        return `${(sizeInBytes / 1024).toFixed(2)} KB`;
+      } else {
+        return `${(sizeInBytes / (1024 * 1024)).toFixed(2)} MB`;
+      }
+    },
   };
 
   // 时间格式化工具
@@ -3768,11 +3783,17 @@
         <div class="panel-body">
           <div class="ark-section">
             <div class="ark-section-label">数据清理</div>
+            <!-- 存储占用展示 -->
+            <div class="ark-trigger-row">
+              <span style="font-size: 12px; color: var(--ark-label);">全部数据大小：</span>
+              <span style="font-size: 14px; font-weight: 600; color: var(--ark-text-primary);" id="ark-storage-size">计算中...</span>
+              <button class="ark-refresh-btn" id="ark-storage-size-refresh-btn" title="重新计算数据大小" style="margin-left: 8px;">↻</button>
+            </div>
             <div class="ark-trigger-row">
               <span style="color:var(--ark-label);font-size:12px;">价格数据保留天数：</span>
               <input type="number" class="ark-minute-input" id="ark-price-days-limit"
-                     placeholder="天数" min="1" step="1" value="${data.priceDataDaysLimit}"
-                     style="width: 80px;" />
+                    placeholder="天数" min="1" step="1" value="${data.priceDataDaysLimit}"
+                    style="width: 80px;" />
               <button class="ark-save-btn" id="ark-save-price-days-btn">保存</button>
             </div>
             <div style="margin-top: 8px; font-size: 11px; color: var(--ark-muted);">
@@ -3800,6 +3821,43 @@
         .addEventListener("click", () => {
           this._dataMaintenancePanel.classList.remove("visible");
         });
+
+      // 计算并展示存储大小
+      const storageSizeEl =
+        this._dataMaintenancePanel.querySelector("#ark-storage-size");
+      const updateStorageSize = () => {
+        if (storageSizeEl) {
+          try {
+            const size = Utils.calculateStorageSize();
+            storageSizeEl.textContent = size;
+          } catch (e) {
+            storageSizeEl.textContent = "计算失败";
+            console.error("[Ark Stock Monitor] 计算存储大小失败:", e);
+          }
+        }
+      };
+
+      updateStorageSize();
+
+      // 添加刷新按钮事件
+      const storageSizeRefreshBtn = this._dataMaintenancePanel.querySelector(
+        "#ark-storage-size-refresh-btn",
+      );
+      if (storageSizeRefreshBtn) {
+        storageSizeRefreshBtn.addEventListener("click", () => {
+          if (storageSizeRefreshBtn.disabled) return;
+
+          storageSizeRefreshBtn.disabled = true;
+          storageSizeRefreshBtn.classList.add("loading");
+
+          // 使用 setTimeout 让动画效果可见
+          setTimeout(() => {
+            updateStorageSize();
+            storageSizeRefreshBtn.disabled = false;
+            storageSizeRefreshBtn.classList.remove("loading");
+          }, 300);
+        });
+      }
 
       const saveDaysBtn = this._dataMaintenancePanel.querySelector(
         "#ark-save-price-days-btn",
