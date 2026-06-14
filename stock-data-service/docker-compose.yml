@@ -1,0 +1,39 @@
+services:
+  ark-api-model-stock-service:
+    build: .
+    image: ark-api-model-stock-service:latest
+    container_name: ark-api-model-stock-service
+    ports:
+      - "3210:3210"
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://ark-api-model-stock-redis:6379
+      - WINDHUB_USER_ID=${WINDHUB_USER_ID}
+      - WINDHUB_COOKIE=${WINDHUB_COOKIE}
+      - WINDHUB_BASE_URL=https://windhub.cc
+      - SYNC_CRON=*/5 * * * *
+      - RATE_LIMIT_WINDOW_SECONDS=60
+      - RATE_LIMIT_MAX=3
+      - PORT=3210
+    depends_on:
+      ark-api-model-stock-redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ark-api-model-stock-redis:
+    image: redis:7-alpine
+    container_name: ark-api-model-stock-redis
+    volumes:
+      - redis-data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+    driver: local

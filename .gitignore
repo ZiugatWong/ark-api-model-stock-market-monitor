@@ -1,0 +1,19 @@
+plans
+
+# 敏感数据
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.p12
+*.pfx
+
+# 凭证和配置
+config.local.*
+*secret*
+*credential*
+
+# 日志
+*.log
+logs/
