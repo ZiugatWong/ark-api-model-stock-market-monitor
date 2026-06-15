@@ -51,6 +51,7 @@
     positions: {},
     priceDataDaysLimit: 7,
     lastPriceDataCleanDate: null,
+    dataServiceUrl: "http://localhost:3210",
     userQuota: null,
     holdingsTotalValue: null,
     theme: "dark",
@@ -86,6 +87,7 @@
           positions: d.positions || {},
           priceDataDaysLimit: d.priceDataDaysLimit || 7,
           lastPriceDataCleanDate: d.lastPriceDataCleanDate || null,
+          dataServiceUrl: d.dataServiceUrl || "http://localhost:3210",
           userQuota: d.userQuota !== undefined ? d.userQuota : null,
           holdingsTotalValue:
             d.holdingsTotalValue !== undefined ? d.holdingsTotalValue : null,
@@ -254,6 +256,65 @@
         return `${(sizeInBytes / (1024 * 1024)).toFixed(2)} MB`;
       }
     },
+
+    // 转换 stock-data-service 返回的数据格式
+    convertPriceDataFormat(serviceData) {
+      // 输入: { "gpt-4": [{timestamp: 1718380800, price: 99.5}] }
+      // 输出: { "gpt-4": [{"1718380800": 99.5}] }
+      const converted = {};
+      for (const [model, records] of Object.entries(serviceData)) {
+        converted[model] = records.map((r) => ({
+          [String(r.timestamp)]: r.price,
+        }));
+      }
+      return converted;
+    },
+
+    // 智能合并价格数据
+    mergePriceData(existingData, newData) {
+      // existingData: 当前存储的 data.data
+      // newData: 从服务获取的数据（已转换格式）
+
+      const merged = { ...existingData };
+      let totalAdded = 0;
+      let totalRemoved = 0;
+
+      for (const [model, newRecords] of Object.entries(newData)) {
+        if (!newRecords || newRecords.length === 0) continue;
+
+        // 获取新数据的时间范围
+        const newTimestamps = newRecords.map((r) =>
+          parseInt(Object.keys(r)[0]),
+        );
+        const minTs = Math.min(...newTimestamps);
+        const maxTs = Math.max(...newTimestamps);
+
+        // 获取现有数据
+        const existing = merged[model] || [];
+
+        // 删除时间范围内的现有数据
+        const filtered = existing.filter((record) => {
+          const ts = parseInt(Object.keys(record)[0]);
+          return ts < minTs || ts > maxTs;
+        });
+
+        totalRemoved += existing.length - filtered.length;
+
+        // 合并新数据
+        merged[model] = [...filtered, ...newRecords];
+
+        // 按时间戳排序
+        merged[model].sort((a, b) => {
+          const tsA = parseInt(Object.keys(a)[0]);
+          const tsB = parseInt(Object.keys(b)[0]);
+          return tsA - tsB;
+        });
+
+        totalAdded += newRecords.length;
+      }
+
+      return { merged, totalAdded, totalRemoved };
+    },
   };
 
   // 时间格式化工具
@@ -371,6 +432,48 @@
           console.error("[Ark Stock Monitor] 获取模型列表失败:", error);
           return data.availableModels || [];
         });
+    },
+
+    async syncBatchData(serviceUrl, endpoint, payload) {
+      // 通用的批量数据同步函数
+      return new Promise((resolve, reject) => {
+        const url = `${serviceUrl.replace(/\/$/, "")}${endpoint}`;
+
+        GM_xmlhttpRequest({
+          method: "POST",
+          url: url,
+          headers: {
+            "Content-Type": "application/json",
+          },
+          data: JSON.stringify(payload),
+          timeout: 30000,
+          onload: (response) => {
+            try {
+              if (response.status !== 200) {
+                reject(new Error(`请求失败: HTTP ${response.status}`));
+                return;
+              }
+
+              const result = JSON.parse(response.responseText);
+
+              if (!result.success) {
+                reject(new Error(result.error || "服务返回失败"));
+                return;
+              }
+
+              resolve(result.data);
+            } catch (e) {
+              reject(new Error(`解析响应失败: ${e.message}`));
+            }
+          },
+          onerror: () => {
+            reject(new Error("网络请求失败，请检查服务地址"));
+          },
+          ontimeout: () => {
+            reject(new Error("请求超时（30秒）"));
+          },
+        });
+      });
     },
   };
 
@@ -3792,8 +3895,19 @@
 
           <div class="ark-section">
             <div class="ark-section-label">数据同步</div>
-            <div style="color:var(--ark-muted);font-size:12px;padding:10px;text-align:center;">
-              功能开发中，敬请期待...
+            <div class="ark-trigger-row">
+              <span style="color:var(--ark-label);font-size:12px;">数据服务地址：</span>
+              <input type="text"
+                     id="ark-data-service-url"
+                     value="${data.dataServiceUrl || ""}"
+                     style="flex: 1; padding: 6px 10px; border-radius: 4px; border: 1px solid var(--ark-border); background: var(--ark-input-bg); color: var(--ark-text-primary);" />
+            </div>
+            <div class="ark-trigger-row" style="margin-top: 12px;">
+              <button class="ark-manual-btn" id="ark-sync-price-data-btn" title="同步最近7天的价格数据">
+                价格同步
+              </button>
+            </div>
+            <div id="ark-sync-status" style="margin-top: 8px; font-size: 11px; color: var(--ark-muted); min-height: 16px;">
             </div>
           </div>
         </div>
@@ -3878,6 +3992,108 @@
         setTimeout(() => {
           saveDaysBtn.textContent = originalText;
         }, 1000);
+      });
+
+      // 数据服务地址输入（参考 Telegram 输入框的 change 事件自动保存）
+      const serviceUrlInput = this._dataMaintenancePanel.querySelector(
+        "#ark-data-service-url",
+      );
+
+      serviceUrlInput.addEventListener("change", () => {
+        const url = serviceUrlInput.value.trim();
+
+        // 简单的 URL 验证
+        if (url && !url.match(/^https?:\/\/.+/)) {
+          alert("请输入有效的服务地址（以 http:// 或 https:// 开头）");
+          serviceUrlInput.value = Storage.load().dataServiceUrl || ""; // 恢复原值
+          return;
+        }
+
+        const d = Storage.load();
+        d.dataServiceUrl = url;
+        Storage.save(d);
+      });
+
+      // 价格同步按钮
+      const syncPriceBtn = this._dataMaintenancePanel.querySelector(
+        "#ark-sync-price-data-btn",
+      );
+      const syncStatusEl =
+        this._dataMaintenancePanel.querySelector("#ark-sync-status");
+
+      syncPriceBtn.addEventListener("click", async () => {
+        const d = Storage.load();
+
+        // 验证必要条件
+        if (!d.dataServiceUrl) {
+          alert("请先输入数据服务地址");
+          return;
+        }
+
+        if (!d.models || d.models.length === 0) {
+          alert("请先在主面板设置要监控的模型");
+          return;
+        }
+
+        // 确认操作
+        if (
+          !confirm(
+            `将从服务获取 ${d.models.length} 个模型的7天价格数据并合并到本地，是否继续？`,
+          )
+        ) {
+          return;
+        }
+
+        // 禁用按钮，显示加载状态
+        syncPriceBtn.disabled = true;
+        syncPriceBtn.textContent = "同步中...";
+        syncStatusEl.textContent = "正在从服务获取数据...";
+        syncStatusEl.style.color = "var(--ark-accent)";
+
+        try {
+          // 调用通用 API，传入价格批量接口的端点和参数
+          const serviceData = await API.syncBatchData(
+            d.dataServiceUrl,
+            "/api/prices/batch",
+            { models: d.models, days: 7 },
+          );
+
+          syncStatusEl.textContent = "数据获取成功，正在处理...";
+
+          // 转换格式（价格特定）
+          const converted = Utils.convertPriceDataFormat(serviceData);
+
+          // 合并数据（价格特定）
+          const { merged, totalAdded, totalRemoved } = Utils.mergePriceData(
+            d.data,
+            converted,
+          );
+
+          // 保存
+          d.data = merged;
+          Storage.save(d);
+
+          // 更新存储大小显示
+          updateStorageSize();
+
+          // 成功反馈
+          syncStatusEl.textContent = `✓ 同步成功！添加了 ${totalAdded} 条价格数据`;
+          syncStatusEl.style.color = "#a6e3a1";
+
+          syncPriceBtn.textContent = "同步完成";
+          setTimeout(() => {
+            syncPriceBtn.textContent = "价格同步";
+            syncPriceBtn.disabled = false;
+          }, 2000);
+        } catch (error) {
+          console.error("[Ark Stock Monitor] 价格同步失败:", error);
+
+          syncStatusEl.textContent = `✗ 同步失败：${error.message}`;
+          syncStatusEl.style.color = "#f38ba8";
+
+          syncPriceBtn.textContent = "价格同步";
+          syncPriceBtn.disabled = false;
+        }
       });
 
       return this._dataMaintenancePanel;
