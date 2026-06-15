@@ -10,7 +10,6 @@ Ark API 模型股票数据服务 - 独立的后端服务，提供价格数据的
 - ✅ 批量查询多个模型价格
 - ✅ IP 限流保护（基于 Redis 存储）
 - ✅ Docker 一键部署
-- ✅ 健康检查接口
 
 ## 技术栈
 
@@ -139,19 +138,6 @@ docker compose down -v
 }
 ```
 
-### GET /api/health
-
-健康检查
-
-**响应：**
-```json
-{
-  "status": "ok",
-  "redis": "connected",
-  "timestamp": 1718380800
-}
-```
-
 ## 配置说明
 
 ### 环境变量
@@ -206,9 +192,6 @@ docker compose down -v
 ## 验证测试
 
 ```bash
-# 健康检查
-curl http://localhost:3210/api/health
-
 # 获取模型列表
 curl http://localhost:3210/api/models
 
@@ -276,7 +259,7 @@ stock-data-service/
 2. **时间戳格式**：API 返回的 `last_update` 是秒级时间戳
 3. **数据清理**：每次同步时自动清理 7 天前的数据
 4. **持久化**：Redis 使用 AOF + RDB 双持久化，最多丢失 1 秒数据
-5. **限流策略**：默认 1 分钟 3 次，基于 Redis 存储实现分布式限流，健康检查接口不限流
+5. **限流策略**：默认 1 分钟 3 次，基于 Redis 存储实现分布式限流
 6. **CORS 跨域**：默认允许所有域名访问（`Access-Control-Allow-Origin: *`）
 
 ## 故障排查
