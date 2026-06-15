@@ -1333,11 +1333,6 @@
       background: #1a1a1a;
       border-radius: 0 0 10px 10px;
     }
-    .ark-positions-last-update {
-      margin-bottom: 10px;
-      font-size: 12px;
-      color: var(--ark-muted);
-    }
 
     #ark-arbitrage-panel {
       position: fixed;
@@ -2017,12 +2012,6 @@
     }
     .ark-trades-refresh-btn:hover { background: #b4befe; }
     .ark-trades-refresh-btn:disabled { background: #555; cursor: not-allowed; }
-    .ark-trades-last-update {
-      font-size: 12px;
-      color: var(--ark-muted);
-      font-style: italic;
-      margin-bottom: 8px;
-    }
 
     /* 刷新按钮样式 */
     .ark-refresh-btn {
@@ -3911,7 +3900,7 @@
             <div class="ark-section-header" style="justify-content: space-between;">
               <div style="display: flex; align-items: center;">
                 <button class="ark-refresh-btn" id="ark-price-refresh-btn" title="手动刷新数据">↻</button>
-                <div class="ark-last-update"><span style="color:var(--ark-label);font-size:12px;">最近更新：</span><span id="ark-last-update-time-price" style="white-space: nowrap;">从未更新</span></div>
+                <div class="ark-last-update">最近更新：<span id="ark-last-update-time-price" style="white-space: nowrap;">从未更新</span></div>
               </div>
               <div style="display: flex; gap: 12px; font-size: 12px;">
                 <div><span style="color:var(--ark-label);">可用余额：</span><span style="color:#4caf50;font-weight:600;" id="ark-user-quota">-</span></div>
@@ -3997,8 +3986,8 @@
               </select>
               <button class="ark-trades-refresh-btn" id="ark-trades-refresh-btn">刷新</button>
             </div>
-            <div class="ark-trades-last-update">
-              最近更新: <span id="ark-trades-last-update-time">${data.tradeHistoryLastFetched ? TimeUtils.formatDateTime(data.tradeHistoryLastFetched, "full") : "从未获取"}</span>
+            <div class="ark-last-update" style="margin-bottom: 8px;">
+              最近更新：<span id="ark-trades-last-update-time">${data.tradeHistoryLastFetched ? TimeUtils.formatDateTime(data.tradeHistoryLastFetched, "full") : "从未更新"}</span>
             </div>
             <div class="ark-table-wrap" id="ark-trades-table-wrap">
               <div class="ark-empty-hint">请选择模型查看交易记录</div>
@@ -4072,8 +4061,8 @@
         </div>
         <div class="panel-body">
           <div class="ark-section">
-            <div class="ark-positions-last-update">
-              最近更新: <span class="last-update-time">${data.lastUpdateTime ? TimeUtils.formatDateTime(data.lastUpdateTime, "full") : "尚未更新"}</span>
+            <div class="ark-last-update" style="margin-bottom: 10px;">
+              最近更新：<span class="last-update-time">${data.lastUpdateTime ? TimeUtils.formatDateTime(data.lastUpdateTime, "full") : "从未更新"}</span>
             </div>
             <div class="ark-table-wrap">
               <table class="ark-positions-table">
@@ -4128,8 +4117,7 @@
         <div class="panel-body">
           <div class="ark-arbitrage-controls">
             <div class="ark-last-update">
-              <span style="color:var(--ark-label);font-size:12px;">最近更新：</span>
-              <span id="ark-arbitrage-last-update-time">${data.lastUpdateTime ? TimeUtils.formatDateTime(data.lastUpdateTime, "full") : "从未更新"}</span>
+              最近更新：<span id="ark-arbitrage-last-update-time">${data.lastUpdateTime ? TimeUtils.formatDateTime(data.lastUpdateTime, "full") : "从未更新"}</span>
             </div>
             <div style="display:flex;gap:10px;">
               <div class="ark-arbitrage-date-wrapper">
@@ -4520,7 +4508,7 @@
       if (!el) return;
       el.textContent = data.tradeHistoryLastFetched
         ? TimeUtils.formatDateTime(data.tradeHistoryLastFetched, "full")
-        : "从未获取";
+        : "从未更新";
     },
 
     populateTradesModelSelect() {

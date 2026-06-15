@@ -1,8 +1,8 @@
 <div align="center">
 <h1>Ark API 模型股票监控</h1>
 <a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Greasyfork Version" src="https://img.shields.io/greasyfork/v/582321?style=flat-square"></a>
-<a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Downloads Total" src="https://img.shields.io/greasyfork/dt/582321?style=flat-square"></a>
-<a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Downloads Per Day" src="https://img.shields.io/greasyfork/dd/582321?style=flat-square"></a>
+<a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Downloads Total" src="https://img.shields.io/greasyfork/dt/582321?style=flat-square&color=green"></a>
+<a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Downloads Per Day" src="https://img.shields.io/greasyfork/dd/582321?style=flat-square&color=orange"></a>
 <a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Rating" src="https://img.shields.io/greasyfork/rating-count/582321?style=flat-square"></a>
 <br>
 <br>
