@@ -4077,7 +4077,7 @@
           updateStorageSize();
 
           // 成功反馈
-          syncStatusEl.textContent = `✓ 同步成功！添加了 ${totalAdded} 条价格数据`;
+          syncStatusEl.textContent = `✓ 同步成功！同步了 ${totalAdded} 条价格数据`;
           syncStatusEl.style.color = "#a6e3a1";
 
           syncPriceBtn.textContent = "同步完成";

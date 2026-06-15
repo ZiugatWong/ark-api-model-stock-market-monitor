@@ -87,27 +87,4 @@ router.post('/sync', async (req, res) => {
   }
 });
 
-/**
- * GET /api/health
- * 健康检查
- */
-router.get('/health', async (req, res) => {
-  try {
-    // 检查Redis连接
-    await redis.ping();
-
-    res.json({
-      status: 'ok',
-      redis: 'connected',
-      timestamp: Math.floor(Date.now() / 1000)
-    });
-  } catch (error) {
-    res.status(503).json({
-      status: 'error',
-      redis: 'disconnected',
-      timestamp: Math.floor(Date.now() / 1000)
-    });
-  }
-});
-
 module.exports = router;

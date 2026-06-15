@@ -16,8 +16,7 @@ services:
       - RATE_LIMIT_MAX=3
       - PORT=3210
     depends_on:
-      ark-api-model-stock-redis:
-        condition: service_healthy
+      - ark-api-model-stock-redis
     restart: unless-stopped
 
   ark-api-model-stock-redis:
@@ -27,11 +26,6 @@ services:
       - redis-data:/data
       - ./redis.conf:/usr/local/etc/redis/redis.conf
     command: redis-server /usr/local/etc/redis/redis.conf
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
     restart: unless-stopped
 
 volumes:

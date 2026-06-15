@@ -49,6 +49,22 @@ app.use((err, req, res, next) => {
 // 启动服务
 async function start() {
   try {
+    // 打印环境变量
+    console.log('==========================================');
+    console.log('[启动] 环境变量检查');
+    console.log('==========================================');
+    console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+    console.log(`REDIS_URL: ${process.env.REDIS_URL}`);
+    console.log(`WINDHUB_USER_ID: ${process.env.WINDHUB_USER_ID}`);
+    console.log(`WINDHUB_COOKIE: ${process.env.WINDHUB_COOKIE ? process.env.WINDHUB_COOKIE.substring(0, 50) + '...' : '未设置'}`);
+    console.log(`WINDHUB_BASE_URL: ${process.env.WINDHUB_BASE_URL}`);
+    console.log(`SYNC_CRON: ${process.env.SYNC_CRON}`);
+    console.log(`RATE_LIMIT_WINDOW_SECONDS: ${process.env.RATE_LIMIT_WINDOW_SECONDS}`);
+    console.log(`RATE_LIMIT_MAX: ${process.env.RATE_LIMIT_MAX}`);
+    console.log(`PORT: ${process.env.PORT}`);
+    console.log('==========================================');
+    console.log('');
+
     // 检查Redis连接
     await redis.ping();
     console.log('[启动] Redis连接成功');
