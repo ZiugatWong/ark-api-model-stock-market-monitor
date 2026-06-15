@@ -3,6 +3,24 @@ const redis = require('../config/redis');
 const windhubApi = require('./windhubApi');
 const config = require('../config/env');
 
+/**
+ * 格式化为东八区时间字符串
+ * @returns {string} 格式: 2026-06-15 20:00:00
+ */
+function formatChinaTime() {
+  const options = {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  };
+  return new Date().toLocaleString('zh-CN', options).replace(/\//g, '-');
+}
+
 class SyncScheduler {
   constructor() {
     this.task = null;
@@ -13,13 +31,13 @@ class SyncScheduler {
    */
   async syncPrices() {
     try {
-      console.log(`[${new Date().toISOString()}] 开始同步价格数据...`);
+      console.log(`[${formatChinaTime()}] 开始同步价格数据...`);
 
       // 1. 调用Windhub API获取所有模型价格
       const marketData = await windhubApi.fetchMarketData();
 
       if (!marketData.stocks || marketData.stocks.length === 0) {
-        console.log(`[${new Date().toISOString()}] API返回数据为空`);
+        console.log(`[${formatChinaTime()}] API返回数据为空`);
         return;
       }
 
@@ -59,9 +77,9 @@ class SyncScheduler {
 
       await pipeline.exec();
 
-      console.log(`[${new Date().toISOString()}] 同步完成，共 ${marketData.stocks.length} 个模型`);
+      console.log(`[${formatChinaTime()}] 同步完成，共 ${marketData.stocks.length} 个模型`);
     } catch (error) {
-      console.error(`[${new Date().toISOString()}] 同步失败:`, error.message);
+      console.error(`[${formatChinaTime()}] 同步失败:`, error.message);
     }
   }
 
