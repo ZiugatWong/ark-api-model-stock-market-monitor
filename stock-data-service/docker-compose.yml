@@ -13,10 +13,12 @@ services:
       - WINDHUB_BASE_URL=https://windhub.cc
       - SYNC_CRON=*/5 * * * *
       - RATE_LIMIT_WINDOW_SECONDS=60
-      - RATE_LIMIT_MAX=3
+      - RATE_LIMIT_MAX=2
       - PORT=3210
     depends_on:
       - ark-api-model-stock-redis
+    networks:
+      - ark-api-network
     restart: unless-stopped
 
   ark-api-model-stock-redis:
@@ -26,7 +28,13 @@ services:
       - redis-data:/data
       - ./redis.conf:/usr/local/etc/redis/redis.conf
     command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - ark-api-network
     restart: unless-stopped
+
+networks:
+  ark-api-network:
+    driver: bridge
 
 volumes:
   redis-data:
