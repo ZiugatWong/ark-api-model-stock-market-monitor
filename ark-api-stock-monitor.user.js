@@ -450,7 +450,7 @@
           onload: (response) => {
             try {
               if (response.status !== 200) {
-                reject(new Error(`请求失败: HTTP ${response.status}`));
+                reject(new Error(`请求失败: HTTP ${response.status} ${response.statusText}`));
                 return;
               }
 
