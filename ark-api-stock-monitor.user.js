@@ -832,7 +832,7 @@
         border: 2px solid ${borderColor};
         border-radius: 12px;
         color: var(--ark-text);
-        z-index: 200000;
+        z-index: 9999;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 14px;
         text-align: center;
@@ -1085,7 +1085,7 @@
       color: #f0f0f0;
       border: 1px solid #333;
       border-radius: 10px;
-      z-index: 99999;
+      z-index: 1999;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: 13px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.5);
@@ -1178,7 +1178,7 @@
       color: #f0f0f0;
       border: 1px solid #333;
       border-radius: 10px;
-      z-index: 99998;
+      z-index: 1998;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: 13px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.5);
@@ -1231,7 +1231,7 @@
       color: #f0f0f0;
       border: 1px solid #333;
       border-radius: 10px;
-      z-index: 99998;
+      z-index: 1998;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: 13px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.5);
@@ -1283,7 +1283,7 @@
       color: #f0f0f0;
       border: 1px solid #333;
       border-radius: 10px;
-      z-index: 99998;
+      z-index: 1998;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: 13px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.5);
@@ -1335,7 +1335,7 @@
       color: #f0f0f0;
       border: 1px solid #333;
       border-radius: 10px;
-      z-index: 99998;
+      z-index: 1998;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: 13px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.5);
@@ -1394,7 +1394,7 @@
       color: #f0f0f0;
       border: 1px solid #333;
       border-radius: 10px;
-      z-index: 99998;
+      z-index: 1998;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: 13px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.5);
@@ -1449,7 +1449,7 @@
       color: #f0f0f0;
       border: 1px solid #333;
       border-radius: 10px;
-      z-index: 99998;
+      z-index: 1998;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: 13px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.5);
@@ -1806,7 +1806,7 @@
       color: #f0f0f0;
       border: 1px solid #333;
       border-radius: 10px;
-      z-index: 100000;
+      z-index: 1000;
       display: none;
       flex-direction: column;
       overflow: hidden;
@@ -1872,7 +1872,7 @@
       color: var(--ark-text);
       font-size: 12px;
       pointer-events: none;
-      z-index: 1000;
+      z-index: 100;
       backdrop-filter: blur(4px);
     }
 
@@ -1955,7 +1955,7 @@
       border-radius: 6px;
       margin-top: 4px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-      z-index: 1000;
+      z-index: 100;
       display: none;
     }
     .ark-model-dropdown.visible { display: block; }
@@ -2052,7 +2052,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: 100;
     }
 
     .ark-chart-error {
@@ -2504,7 +2504,7 @@
           color: var(--ark-text) !important;
           border: 1px solid var(--ark-border) !important;
           border-radius: 10px !important;
-          z-index: 100000 !important;
+          z-index: 1000 !important;
           display: flex !important;
           flex-direction: column !important;
           overflow: hidden !important;
@@ -2669,7 +2669,7 @@
         background: #ff6b6b;
         color: white;
         border-radius: 6px;
-        z-index: 100001;
+        z-index: 50;
         font-size: 13px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.3);
       `;
@@ -3129,6 +3129,14 @@
     _positionsPanel: null,
     _arbitragePanel: null,
     _dataMaintenancePanel: null,
+    _currentZIndex: 2000, // 动态 z-index 起始值，每次打开面板时递增
+
+    // 将面板置顶
+    bringToFront(panel) {
+      if (!panel) return;
+      this._currentZIndex++;
+      panel.style.zIndex = this._currentZIndex;
+    },
 
     createMainPanel() {
       if (this._mainPanel) return this._mainPanel;
@@ -3210,7 +3218,12 @@
           if (!UIPanels._settingsPanel) {
             UIPanels._settingsPanel = UIPanels.createSettingsPanel();
           }
+          const isVisible = UIPanels._settingsPanel.classList.contains("visible");
           UIPanels._settingsPanel.classList.toggle("visible");
+          // 如果面板已经显示，或者刚切换为显示状态，则置顶
+          if (isVisible || UIPanels._settingsPanel.classList.contains("visible")) {
+            UIPanels.bringToFront(UIPanels._settingsPanel);
+          }
         });
 
       this._mainPanel
@@ -3220,7 +3233,12 @@
             UIPanels._dataMaintenancePanel =
               UIPanels.createDataMaintenancePanel();
           }
+          const isVisible = UIPanels._dataMaintenancePanel.classList.contains("visible");
           UIPanels._dataMaintenancePanel.classList.toggle("visible");
+          // 如果面板已经显示，或者刚切换为显示状态，则置顶
+          if (isVisible || UIPanels._dataMaintenancePanel.classList.contains("visible")) {
+            UIPanels.bringToFront(UIPanels._dataMaintenancePanel);
+          }
         });
 
       this._mainPanel
@@ -3236,6 +3254,7 @@
             UIPanels._pricePanel = UIPanels.createPricePanel();
           }
           UIPanels._pricePanel.classList.add("visible");
+          UIPanels.bringToFront(UIPanels._pricePanel);
           UIRenderers.refreshPricePanelFull();
         });
 
@@ -3246,6 +3265,7 @@
             UIPanels._tradesPanel = UIPanels.createTradesPanel();
           }
           UIPanels._tradesPanel.classList.add("visible");
+          UIPanels.bringToFront(UIPanels._tradesPanel);
           const data = Storage.load();
           if (!data.tradeHistoryLastFetched) {
             const refreshBtn = UIPanels._tradesPanel.querySelector(
@@ -3277,6 +3297,7 @@
             UIPanels._positionsPanel = UIPanels.createPositionsPanel();
           }
           UIPanels._positionsPanel.classList.add("visible");
+          UIPanels.bringToFront(UIPanels._positionsPanel);
           const data = Storage.load();
           UIRenderers.refreshPositionsPanel(data);
         });
@@ -3288,6 +3309,7 @@
             UIPanels._arbitragePanel = UIPanels.createArbitragePanel();
           }
           UIPanels._arbitragePanel.classList.add("visible");
+          UIPanels.bringToFront(UIPanels._arbitragePanel);
           const data = Storage.load();
           const sortSelect = UIPanels._arbitragePanel.querySelector(
             "#ark-arbitrage-sort-select",
@@ -4169,6 +4191,7 @@
           UIPanels._positionsPanel = UIPanels.createPositionsPanel();
         }
         UIPanels._positionsPanel.classList.add("visible");
+        UIPanels.bringToFront(UIPanels._positionsPanel);
         const data = Storage.load();
         UIRenderers.refreshPositionsPanel(data);
       });
@@ -4953,7 +4976,12 @@
 
       handle.addEventListener("mousedown", (e) => {
         if (e.target.tagName === "BUTTON") return;
-        if (panelId && manager) manager.activatePanel(panelId);
+        if (panelId && manager) {
+          manager.activatePanel(panelId);
+        } else {
+          // 对于非图表面板，直接调用 UIPanels.bringToFront
+          UIPanels.bringToFront(el);
+        }
 
         startX = e.clientX;
         startY = e.clientY;
@@ -5193,12 +5221,14 @@
   GM_registerMenuCommand("主监控面板", () => {
     const p = UIPanels.createMainPanel();
     p.classList.add("visible");
+    UIPanels.bringToFront(p);
   });
   GM_registerMenuCommand("最新价格面板", () => {
     if (!UIPanels._pricePanel) {
       UIPanels._pricePanel = UIPanels.createPricePanel();
     }
     UIPanels._pricePanel.classList.add("visible");
+    UIPanels.bringToFront(UIPanels._pricePanel);
     UIRenderers.refreshPricePanelFull();
   });
 })();
