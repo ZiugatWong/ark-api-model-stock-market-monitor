@@ -15,6 +15,7 @@ services:
       - RATE_LIMIT_WINDOW_SECONDS=60
       - RATE_LIMIT_MAX=2
       - PORT=3210
+      - EXPRESS_TRUST_PROXY=false
     depends_on:
       - ark-api-model-stock-redis
     networks:

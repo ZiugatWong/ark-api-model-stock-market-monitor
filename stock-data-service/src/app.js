@@ -7,6 +7,10 @@ const syncScheduler = require('./services/syncScheduler');
 
 const app = express();
 
+// Trust proxy 设置
+const trustProxy = process.env.EXPRESS_TRUST_PROXY === 'true';
+app.set('trust proxy', trustProxy);
+
 // 中间件
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -62,6 +66,7 @@ async function start() {
     console.log(`RATE_LIMIT_WINDOW_SECONDS: ${process.env.RATE_LIMIT_WINDOW_SECONDS}`);
     console.log(`RATE_LIMIT_MAX: ${process.env.RATE_LIMIT_MAX}`);
     console.log(`PORT: ${process.env.PORT}`);
+    console.log(`EXPRESS_TRUST_PROXY: ${process.env.EXPRESS_TRUST_PROXY}`);
     console.log('==========================================');
     console.log('');
 

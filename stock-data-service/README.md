@@ -159,6 +159,7 @@ docker compose down -v
 | `RATE_LIMIT_WINDOW_SECONDS` | 限流窗口（秒）       | `60`                                     |
 | `RATE_LIMIT_MAX`            | 窗口内最大请求数     | `3`                                      |
 | `PORT`                      | 服务端口             | `3210`                                   |
+| `EXPRESS_TRUST_PROXY`       | Express Trust Proxy  | `false`                                  |
 
 > **修改配置**：如需自定义可选配置，请直接修改 `docker-compose.yml` 文件中的对应值。
 
@@ -261,6 +262,7 @@ stock-data-service/
 4. **持久化**：Redis 使用 AOF + RDB 双持久化，最多丢失 1 秒数据
 5. **限流策略**：默认 1 分钟 3 次，基于 Redis 存储实现分布式限流
 6. **CORS 跨域**：默认允许所有域名访问（`Access-Control-Allow-Origin: *`）
+7. **Trust Proxy**：如果服务运行在反向代理（如 Nginx、Cloudflare）后面，建议设置 `EXPRESS_TRUST_PROXY=true` 以正确获取客户端真实 IP（用于限流）
 
 ## 故障排查
 
