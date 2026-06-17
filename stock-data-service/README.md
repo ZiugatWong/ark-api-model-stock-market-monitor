@@ -9,6 +9,7 @@ Ark API 模型股票数据服务 - 独立的后端服务，提供价格数据的
 - ✅ 最近 7 天价格历史查询
 - ✅ 批量查询多个模型价格
 - ✅ IP 限流保护（基于 Redis 存储）
+- ✅ Telegram 失败通知（连续 3 次 API 失败告警）
 - ✅ Docker 一键部署
 
 ## 技术栈
@@ -161,6 +162,14 @@ docker compose down -v
 | `PORT`                      | 服务端口             | `3210`                                   |
 | `EXPRESS_TRUST_PROXY`       | Express Trust Proxy  | `false`                                  |
 
+**通知配置（可选）：**
+
+| 变量名 | 说明 | 默认值 |
+| ------ | ---- | ------ |
+| `WINDHUB_API_FAILED_NOTIFICATION` | 通知渠道，设置为 `telegram` 启用通知 | 空（不发送通知） |
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token | 空 |
+| `TELEGRAM_CHAT_ID` | Telegram Chat ID | 空 |
+
 > **修改配置**：如需自定义可选配置，请直接修改 `docker-compose.yml` 文件中的对应值。
 
 ### Cron 表达式示例
@@ -189,6 +198,80 @@ docker compose down -v
 **限流计数器（基于 Redis）：**
 - Key: `ratelimit:{ip}`
 - TTL: 动态（根据窗口大小）
+
+**失败通知计数器：**
+- Key: `windhub:api:failure:count` - 失败次数（TTL: 1小时）
+- Key: `windhub:api:failure:last_error` - 最后错误详情（TTL: 1小时）
+- Key: `windhub:api:notification:cooldown` - 通知冷却期（TTL: 30分钟）
+
+## 失败通知配置
+
+当数据服务连续 3 次调用 WindHub API 失败后，可自动通过 Telegram 发送告警通知。
+
+### 1. 创建 Telegram Bot
+
+1. 在 Telegram 中搜索 `@BotFather`
+2. 发送 `/newbot` 创建新机器人
+3. 按提示设置机器人名称和用户名
+4. 获得 `Bot Token`（格式：`123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`）
+
+### 2. 获取 Chat ID
+
+**方法 1 - 使用 API（推荐）：**
+```bash
+# 1. 先给你的 Bot 发送任意消息
+# 2. 访问以下 URL（替换 <YOUR_BOT_TOKEN>）
+https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
+
+# 3. 在返回的 JSON 中找到 "chat":{"id":123456789}
+```
+
+**方法 2 - 使用 @userinfobot：**
+1. 搜索并启动 @userinfobot
+2. 发送任意消息给它
+3. 它会返回你的 Chat ID
+
+### 3. 配置环境变量
+
+编辑 `.env` 文件，添加以下配置：
+
+```bash
+# 启用 Telegram 通知
+WINDHUB_API_FAILED_NOTIFICATION=telegram
+
+# Telegram 凭证
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+TELEGRAM_CHAT_ID=123456789
+```
+
+### 4. 通知触发条件
+
+- ✅ 连续失败 3 次才发送通知
+- ✅ 发送通知后进入 30 分钟冷却期（避免通知轰炸）
+- ✅ 同步成功后自动重置失败计数器
+- ✅ 长时间未同步（1 小时）后计数器自动过期
+
+### 5. 通知消息示例
+
+```
+⚠️ WindHub API 连续失败告警
+
+失败次数: 3 次
+最后失败时间: 2026-06-17 14:30:00
+失败原因: API请求失败: 401 - Unauthorized
+
+请检查 WINDHUB_COOKIE 是否过期。
+```
+
+### 6. 禁用通知
+
+如不需要通知功能，在 `.env` 中删除或注释相关配置：
+
+```bash
+# WINDHUB_API_FAILED_NOTIFICATION=telegram
+# TELEGRAM_BOT_TOKEN=
+# TELEGRAM_CHAT_ID=
+```
 
 ## 验证测试
 
@@ -238,7 +321,8 @@ stock-data-service/
 │   ├── services/
 │   │   ├── windhubApi.js       # Windhub API 封装
 │   │   ├── priceStorage.js     # 价格数据存储
-│   │   └── syncScheduler.js    # 定时同步任务
+│   │   ├── syncScheduler.js    # 定时同步任务
+│   │   └── notificationService.js  # 通知服务
 │   ├── middleware/
 │   │   └── rateLimit.js        # 限流中间件
 │   ├── routes/
@@ -292,3 +376,25 @@ curl -X POST http://localhost:3210/api/sync
 # 检查 Cron 表达式是否有效
 # 查看应用日志中的 [定时任务] 相关信息
 ```
+
+### 通知未收到
+```bash
+# 1. 检查环境变量是否生效
+docker exec -it ark-api-model-stock-service printenv | grep TELEGRAM
+
+# 2. 查看服务日志
+docker logs -f ark-api-model-stock-service
+
+# 3. 检查 Redis 失败计数器
+docker exec -it ark-api-model-stock-redis redis-cli GET windhub:api:failure:count
+
+# 4. 检查冷却期状态
+docker exec -it ark-api-model-stock-redis redis-cli EXISTS windhub:api:notification:cooldown
+```
+
+**可能原因：**
+- 失败次数未达到 3 次
+- 正在冷却期内（30 分钟内已发送过通知）
+- 环境变量配置错误
+- Bot Token 或 Chat ID 不正确
+- 网络问题无法访问 Telegram API

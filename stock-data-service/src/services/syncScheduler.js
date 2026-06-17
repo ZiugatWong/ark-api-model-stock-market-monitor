@@ -1,7 +1,8 @@
-const cron = require('node-cron');
-const redis = require('../config/redis');
-const windhubApi = require('./windhubApi');
-const config = require('../config/env');
+const cron = require("node-cron");
+const redis = require("../config/redis");
+const windhubApi = require("./windhubApi");
+const notificationService = require("./notificationService");
+const config = require("../config/env");
 
 /**
  * 格式化为东八区时间字符串
@@ -9,16 +10,16 @@ const config = require('../config/env');
  */
 function formatChinaTime() {
   const options = {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
   };
-  return new Date().toLocaleString('zh-CN', options).replace(/\//g, '-');
+  return new Date().toLocaleString("zh-CN", options).replace(/\//g, "-");
 }
 
 class SyncScheduler {
@@ -42,17 +43,23 @@ class SyncScheduler {
       }
 
       // 2. 更新模型列表缓存
-      const modelNames = marketData.stocks.map(s => s.model_name).filter(Boolean);
+      const modelNames = marketData.stocks
+        .map((s) => s.model_name)
+        .filter(Boolean);
       if (modelNames.length > 0) {
-        await redis.del('models:all');
-        await redis.sadd('models:all', ...modelNames);
-        await redis.expire('models:all', 3600); // 1小时
+        await redis.del("models:all");
+        await redis.sadd("models:all", ...modelNames);
+        await redis.expire("models:all", 3600); // 1小时
       }
 
       // 3. 批量存储价格数据
       const pipeline = redis.pipeline();
       for (const stock of marketData.stocks) {
-        if (!stock.model_name || stock.current_price === undefined || !stock.last_update) {
+        if (
+          !stock.model_name ||
+          stock.current_price === undefined ||
+          !stock.last_update
+        ) {
           continue;
         }
 
@@ -68,8 +75,8 @@ class SyncScheduler {
         pipeline.zadd(key, timestamp, member);
 
         // 清理7天前数据
-        const sevenDaysAgo = timestamp - (7 * 24 * 60 * 60);
-        pipeline.zremrangebyscore(key, '-inf', sevenDaysAgo);
+        const sevenDaysAgo = timestamp - 7 * 24 * 60 * 60;
+        pipeline.zremrangebyscore(key, "-inf", sevenDaysAgo);
 
         // 设置TTL（8天兜底）
         pipeline.expire(key, 8 * 24 * 60 * 60);
@@ -77,9 +84,24 @@ class SyncScheduler {
 
       await pipeline.exec();
 
-      console.log(`[${formatChinaTime()}] 同步完成，共 ${marketData.stocks.length} 个模型`);
+      // 成功后重置失败计数器
+      await notificationService.resetFailureCount();
+
+      console.log(
+        `[${formatChinaTime()}] 同步完成，共 ${marketData.stocks.length} 个模型`,
+      );
     } catch (error) {
       console.error(`[${formatChinaTime()}] 同步失败:`, error.message);
+
+      // 处理失败通知（不影响主流程）
+      try {
+        await notificationService.handleSyncFailure(error);
+      } catch (notifyError) {
+        console.error(
+          `[${formatChinaTime()}] 通知服务异常:`,
+          notifyError.message,
+        );
+      }
     }
   }
 
@@ -111,7 +133,7 @@ class SyncScheduler {
   stop() {
     if (this.task) {
       this.task.stop();
-      console.log('[定时任务] 已停止');
+      console.log("[定时任务] 已停止");
     }
   }
 }

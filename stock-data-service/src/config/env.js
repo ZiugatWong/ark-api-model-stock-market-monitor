@@ -39,4 +39,27 @@ module.exports = {
     port: parseInt(process.env.PORT || "3210"),
     env: process.env.NODE_ENV || "development",
   },
+
+  // 通知配置
+  notification: {
+    channel: process.env.WINDHUB_API_FAILED_NOTIFICATION || "",
+    failureThreshold: 3,
+    cooldownSeconds: 1800,
+    telegram: {
+      botToken: process.env.TELEGRAM_BOT_TOKEN || "",
+      chatId: process.env.TELEGRAM_CHAT_ID || "",
+    },
+  },
 };
+
+// 通知配置完整性检查
+if (module.exports.notification.channel === "telegram") {
+  if (
+    !module.exports.notification.telegram.botToken ||
+    !module.exports.notification.telegram.chatId
+  ) {
+    console.warn(
+      "[警告] 通知配置不完整：缺少 Telegram 凭证，通知功能将无法使用"
+    );
+  }
+}

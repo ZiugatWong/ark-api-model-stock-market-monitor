@@ -16,6 +16,9 @@ services:
       - RATE_LIMIT_MAX=2
       - PORT=3210
       - EXPRESS_TRUST_PROXY=false
+      - WINDHUB_API_FAILED_NOTIFICATION=${WINDHUB_API_FAILED_NOTIFICATION:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
     depends_on:
       - ark-api-model-stock-redis
     networks:
