@@ -1,15 +1,17 @@
 const redis = require('../config/redis');
+const REDIS_KEYS = require('../constants/redisKeys');
+const { DATA_RETENTION_DAYS } = require('../constants/business');
 
 class PriceStorage {
   /**
    * 批量查询多个模型的价格数据
    * @param {string[]} modelNames - 模型名称列表
-   * @param {number} days - 查询天数，默认7天
+   * @param {number} days - 查询天数，默认使用配置的保留天数
    * @returns {Promise<Object>} 格式: {modelName: [{timestamp, price}, ...]}
    */
-  async getBatchPrices(modelNames, days = 7) {
+  async getBatchPrices(modelNames, days = DATA_RETENTION_DAYS) {
     if (!modelNames || modelNames.length === 0) {
-      return {};
+      return ;
     }
 
     const startTime = Math.floor(Date.now() / 1000) - (days * 24 * 60 * 60);
@@ -17,7 +19,7 @@ class PriceStorage {
     // 使用Pipeline批量查询
     const pipeline = redis.pipeline();
     modelNames.forEach(name => {
-      pipeline.zrangebyscore(`price:${name}`, startTime, '+inf');
+      pipeline.zrangebyscore(REDIS_KEYS.PRICE(name), startTime, '+inf');
     });
 
     const results = await pipeline.exec();
@@ -41,7 +43,7 @@ class PriceStorage {
    * @returns {Promise<string[]>} 模型名称列表
    */
   async getAllModels() {
-    const models = await redis.smembers('models:all');
+    const models = await redis.smembers(REDIS_KEYS.MODELS_ALL);
     return models.sort();
   }
 }

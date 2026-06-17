@@ -3,24 +3,9 @@ const redis = require("../config/redis");
 const windhubApi = require("./windhubApi");
 const notificationService = require("./notificationService");
 const config = require("../config/env");
-
-/**
- * 格式化为东八区时间字符串
- * @returns {string} 格式: 2026-06-15 20:00:00
- */
-function formatChinaTime() {
-  const options = {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  };
-  return new Date().toLocaleString("zh-CN", options).replace(/\//g, "-");
-}
+const { formatChinaTime } = require("../utils/timeUtils");
+const REDIS_KEYS = require("../constants/redisKeys");
+const { DATA_RETENTION_SECONDS, DATA_TTL_SECONDS, CACHE_TTL } = require("../constants/business");
 
 class SyncScheduler {
   constructor() {
@@ -47,9 +32,9 @@ class SyncScheduler {
         .map((s) => s.model_name)
         .filter(Boolean);
       if (modelNames.length > 0) {
-        await redis.del("models:all");
-        await redis.sadd("models:all", ...modelNames);
-        await redis.expire("models:all", 3600); // 1小时
+        await redis.del(REDIS_KEYS.MODELS_ALL);
+        await redis.sadd(REDIS_KEYS.MODELS_ALL, ...modelNames);
+        await redis.expire(REDIS_KEYS.MODELS_ALL, CACHE_TTL.MODELS_LIST);
       }
 
       // 3. 批量存储价格数据
@@ -65,7 +50,7 @@ class SyncScheduler {
 
         const price = parseFloat(stock.current_price.toFixed(2));
         const timestamp = stock.last_update; // 秒级时间戳
-        const key = `price:${stock.model_name}`;
+        const key = REDIS_KEYS.PRICE(stock.model_name);
         const member = `${timestamp}:${price}`;
 
         // 先删除该时间戳的旧数据（防止同一时间戳有多条记录）
@@ -74,12 +59,12 @@ class SyncScheduler {
         // 添加新价格数据
         pipeline.zadd(key, timestamp, member);
 
-        // 清理7天前数据
-        const sevenDaysAgo = timestamp - 7 * 24 * 60 * 60;
-        pipeline.zremrangebyscore(key, "-inf", sevenDaysAgo);
+        // 清理保留期之前的数据
+        const cutoffTime = timestamp - DATA_RETENTION_SECONDS;
+        pipeline.zremrangebyscore(key, "-inf", cutoffTime);
 
-        // 设置TTL（8天兜底）
-        pipeline.expire(key, 8 * 24 * 60 * 60);
+        // 设置TTL（兜底）
+        pipeline.expire(key, DATA_TTL_SECONDS);
       }
 
       await pipeline.exec();

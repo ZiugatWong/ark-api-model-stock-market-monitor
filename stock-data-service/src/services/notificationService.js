@@ -1,24 +1,9 @@
 const axios = require('axios');
 const redis = require('../config/redis');
 const config = require('../config/env');
-
-/**
- * 格式化为东八区时间字符串
- * @returns {string} 格式: 2026-06-17 14:30:00
- */
-function formatChinaTime() {
-  const options = {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  };
-  return new Date().toLocaleString('zh-CN', options).replace(/\//g, '-');
-}
+const { formatChinaTime } = require('../utils/timeUtils');
+const REDIS_KEYS = require('../constants/redisKeys');
+const { CACHE_TTL } = require('../constants/business');
 
 /**
  * 通知服务
@@ -36,9 +21,9 @@ class NotificationService {
    * Redis Key 常量
    */
   static KEYS = {
-    FAILURE_COUNT: 'windhub:api:failure:count',
-    LAST_ERROR: 'windhub:api:failure:last_error',
-    COOLDOWN: 'windhub:api:notification:cooldown'
+    FAILURE_COUNT: REDIS_KEYS.FAILURE_COUNT,
+    LAST_ERROR: REDIS_KEYS.LAST_ERROR,
+    COOLDOWN: REDIS_KEYS.NOTIFICATION_COOLDOWN
   };
 
   /**
@@ -51,8 +36,8 @@ class NotificationService {
       // 递增计数器
       const count = await redis.incr(NotificationService.KEYS.FAILURE_COUNT);
 
-      // 设置 1 小时过期时间
-      await redis.expire(NotificationService.KEYS.FAILURE_COUNT, 3600);
+      // 设置过期时间
+      await redis.expire(NotificationService.KEYS.FAILURE_COUNT, CACHE_TTL.FAILURE_COUNT);
 
       // 保存最后一次错误详情
       const errorDetails = {
@@ -65,7 +50,7 @@ class NotificationService {
         NotificationService.KEYS.LAST_ERROR,
         JSON.stringify(errorDetails),
         'EX',
-        3600
+        CACHE_TTL.ERROR_DETAILS
       );
 
       return count;

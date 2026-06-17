@@ -2,11 +2,12 @@ const rateLimit = require('express-rate-limit');
 const { RedisStore } = require('rate-limit-redis');
 const redis = require('../config/redis');
 const config = require('../config/env');
+const REDIS_KEYS = require('../constants/redisKeys');
 
 const limiter = rateLimit({
   store: new RedisStore({
     sendCommand: (...args) => redis.call(...args),
-    prefix: 'ratelimit:',
+    prefix: REDIS_KEYS.RATE_LIMIT_PREFIX,
   }),
   windowMs: config.rateLimit.windowSeconds * 1000, // 秒转毫秒
   max: config.rateLimit.max,
