@@ -155,6 +155,9 @@ docker compose down -v
 | 变量名                      | 说明                 | 默认值                                   |
 | --------------------------- | -------------------- | ---------------------------------------- |
 | `WINDHUB_BASE_URL`          | API 基础 URL         | `https://windhub.cc`                     |
+| `WINDHUB_API_TIMEOUT`       | API 请求超时（毫秒） | `15000`                                  |
+| `WINDHUB_API_RETRIES`       | API 请求重试次数     | `3`                                      |
+| `WINDHUB_API_RETRY_DELAY`   | 重试间隔（毫秒）     | `2000`                                   |
 | `SYNC_CRON`                 | 同步任务 Cron 表达式 | `*/5 * * * *`（每5分钟）                 |
 | `REDIS_URL`                 | Redis 连接 URL       | `redis://ark-api-model-stock-redis:6379` |
 | `RATE_LIMIT_WINDOW_SECONDS` | 限流窗口（秒）       | `60`                                     |
@@ -360,8 +363,24 @@ docker compose logs ark-api-model-stock-redis
 ```
 
 ### 同步失败
+
+当出现 `API请求无响应` 错误时，通常是网络抖动或 WindHub 服务端偶发超时导致。数据服务已内置重试机制：
+
+- 请求超时后自动重试，最多重试 3 次（由 `WINDHUB_API_RETRIES` 控制）
+- 每次重试间隔 2 秒（由 `WINDHUB_API_RETRY_DELAY` 控制）
+- 仅对可恢复的网络错误重试（超时、连接重置、DNS 失败等），服务端返回 4xx/5xx 不会重试
+- 重试耗尽后仍失败才会记录为同步失败
+
+如果频繁出现同步失败，可尝试增大超时和重试参数：
+
+```env
+WINDHUB_API_TIMEOUT=20000
+WINDHUB_API_RETRIES=5
+WINDHUB_API_RETRY_DELAY=3000
+```
+
 ```bash
-# 查看应用日志
+# 查看应用日志，确认重试情况
 docker compose logs ark-api-model-stock-service
 
 # 检查环境变量是否正确

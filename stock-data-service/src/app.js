@@ -66,6 +66,9 @@ async function start() {
       `WINDHUB_COOKIE: ${process.env.WINDHUB_COOKIE ? process.env.WINDHUB_COOKIE.substring(0, 50) + "..." : "未设置"}`,
     );
     logger.log("启动", `WINDHUB_BASE_URL: ${process.env.WINDHUB_BASE_URL}`);
+    logger.log("启动", `WINDHUB_API_TIMEOUT: ${process.env.WINDHUB_API_TIMEOUT}`);
+    logger.log("启动", `WINDHUB_API_RETRIES: ${process.env.WINDHUB_API_RETRIES}`);
+    logger.log("启动", `WINDHUB_API_RETRY_DELAY: ${process.env.WINDHUB_API_RETRY_DELAY}`);
     logger.log("启动", `SYNC_CRON: ${process.env.SYNC_CRON}`);
     logger.log(
       "启动",

@@ -17,6 +17,9 @@ module.exports = {
     userId: process.env.WINDHUB_USER_ID,
     cookie: process.env.WINDHUB_COOKIE,
     baseUrl: process.env.WINDHUB_BASE_URL || "https://windhub.cc",
+    timeout: parseInt(process.env.WINDHUB_API_TIMEOUT || "15000"), // 请求超时（毫秒）
+    retries: parseInt(process.env.WINDHUB_API_RETRIES || "3"), // 重试次数
+    retryDelay: parseInt(process.env.WINDHUB_API_RETRY_DELAY || "2000"), // 重试间隔（毫秒）
   },
 
   // 定时任务配置
@@ -61,7 +64,7 @@ if (module.exports.notification.channel === "telegram") {
   ) {
     logger.warn(
       "环境配置",
-      "通知配置不完整：缺少 Telegram 凭证，通知功能将无法使用"
+      "通知配置不完整：缺少 Telegram 凭证，通知功能将无法使用",
     );
   }
 }
