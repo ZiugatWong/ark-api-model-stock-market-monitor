@@ -450,7 +450,11 @@
           onload: (response) => {
             try {
               if (response.status !== 200) {
-                reject(new Error(`请求失败: HTTP ${response.status} ${response.statusText}`));
+                reject(
+                  new Error(
+                    `请求失败: HTTP ${response.status} ${response.statusText}`,
+                  ),
+                );
                 return;
               }
 
@@ -3218,10 +3222,14 @@
           if (!UIPanels._settingsPanel) {
             UIPanels._settingsPanel = UIPanels.createSettingsPanel();
           }
-          const isVisible = UIPanels._settingsPanel.classList.contains("visible");
+          const isVisible =
+            UIPanels._settingsPanel.classList.contains("visible");
           UIPanels._settingsPanel.classList.toggle("visible");
           // 如果面板已经显示，或者刚切换为显示状态，则置顶
-          if (isVisible || UIPanels._settingsPanel.classList.contains("visible")) {
+          if (
+            isVisible ||
+            UIPanels._settingsPanel.classList.contains("visible")
+          ) {
             UIPanels.bringToFront(UIPanels._settingsPanel);
           }
         });
@@ -3233,10 +3241,14 @@
             UIPanels._dataMaintenancePanel =
               UIPanels.createDataMaintenancePanel();
           }
-          const isVisible = UIPanels._dataMaintenancePanel.classList.contains("visible");
+          const isVisible =
+            UIPanels._dataMaintenancePanel.classList.contains("visible");
           UIPanels._dataMaintenancePanel.classList.toggle("visible");
           // 如果面板已经显示，或者刚切换为显示状态，则置顶
-          if (isVisible || UIPanels._dataMaintenancePanel.classList.contains("visible")) {
+          if (
+            isVisible ||
+            UIPanels._dataMaintenancePanel.classList.contains("visible")
+          ) {
             UIPanels.bringToFront(UIPanels._dataMaintenancePanel);
           }
         });
@@ -4100,7 +4112,7 @@
 
           // 成功反馈
           syncStatusEl.textContent = `✓ 同步成功！同步了 ${totalAdded} 条价格数据`;
-          syncStatusEl.style.color = "#a6e3a1";
+          syncStatusEl.style.color = "#1db110";
 
           syncPriceBtn.textContent = "同步完成";
           setTimeout(() => {
@@ -4111,7 +4123,7 @@
           console.error("[Ark Stock Monitor] 价格同步失败:", error);
 
           syncStatusEl.textContent = `✗ 同步失败：${error.message}`;
-          syncStatusEl.style.color = "#f38ba8";
+          syncStatusEl.style.color = "#af0837";
 
           syncPriceBtn.textContent = "价格同步";
           syncPriceBtn.disabled = false;
