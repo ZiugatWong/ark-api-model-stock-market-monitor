@@ -4974,14 +4974,21 @@
 
       let startX, startY, origX, origY;
 
-      handle.addEventListener("mousedown", (e) => {
-        if (e.target.tagName === "BUTTON") return;
+      // 点击面板任何位置都置顶
+      el.addEventListener("mousedown", (e) => {
+        // 点击调整大小手柄时不置顶（resize handle 会处理自己的逻辑）
+        if (e.target.classList.contains("resize-handle")) return;
+
         if (panelId && manager) {
           manager.activatePanel(panelId);
         } else {
           // 对于非图表面板，直接调用 UIPanels.bringToFront
           UIPanels.bringToFront(el);
         }
+      });
+
+      handle.addEventListener("mousedown", (e) => {
+        if (e.target.tagName === "BUTTON") return;
 
         startX = e.clientX;
         startY = e.clientY;
