@@ -4,6 +4,7 @@ const priceStorage = require('../services/priceStorage');
 const syncScheduler = require('../services/syncScheduler');
 const { sendSuccess, sendError, asyncHandler } = require('../utils/responseHelper');
 const { DATA_RETENTION_DAYS } = require('../constants/business');
+const logger = require('../utils/logger');
 
 const router = express.Router();
 
@@ -47,7 +48,7 @@ router.get('/models', asyncHandler('/api/models', async (req, res) => {
 router.post('/sync', asyncHandler('/api/sync', async (req, res) => {
   // 异步执行同步任务
   syncScheduler.syncPrices().catch(err => {
-    console.error('[手动同步错误]:', err.message);
+    logger.error('手动同步', '错误:', err.message);
   });
 
   sendSuccess(res, { message: '同步任务已触发' });

@@ -1,7 +1,7 @@
 const axios = require('axios');
 const redis = require('../config/redis');
 const config = require('../config/env');
-const { formatChinaTime } = require('../utils/timeUtils');
+const logger = require('../utils/logger');
 const REDIS_KEYS = require('../constants/redisKeys');
 const { CACHE_TTL } = require('../constants/business');
 
@@ -55,7 +55,7 @@ class NotificationService {
 
       return count;
     } catch (error) {
-      console.error(`[通知服务] Redis 操作失败:`, error.message);
+      logger.error("通知服务", "Redis 操作失败:", error.message);
       return 0;
     }
   }
@@ -69,7 +69,7 @@ class NotificationService {
       await redis.del(NotificationService.KEYS.FAILURE_COUNT);
       await redis.del(NotificationService.KEYS.LAST_ERROR);
     } catch (error) {
-      console.error(`[通知服务] 重置计数器失败:`, error.message);
+      logger.error("通知服务", "重置计数器失败:", error.message);
     }
   }
 
@@ -82,7 +82,7 @@ class NotificationService {
       const count = await redis.get(NotificationService.KEYS.FAILURE_COUNT);
       return count ? parseInt(count) : 0;
     } catch (error) {
-      console.error(`[通知服务] 获取计数器失败:`, error.message);
+      logger.error("通知服务", "获取计数器失败:", error.message);
       return 0;
     }
   }
@@ -96,7 +96,7 @@ class NotificationService {
       const data = await redis.get(NotificationService.KEYS.LAST_ERROR);
       return data ? JSON.parse(data) : null;
     } catch (error) {
-      console.error(`[通知服务] 获取错误详情失败:`, error.message);
+      logger.error("通知服务", "获取错误详情失败:", error.message);
       return null;
     }
   }
@@ -110,7 +110,7 @@ class NotificationService {
       const exists = await redis.exists(NotificationService.KEYS.COOLDOWN);
       return exists === 1;
     } catch (error) {
-      console.error(`[通知服务] 检查冷却期失败:`, error.message);
+      logger.error("通知服务", "检查冷却期失败:", error.message);
       return false;
     }
   }
@@ -124,7 +124,7 @@ class NotificationService {
     try {
       await redis.set(NotificationService.KEYS.COOLDOWN, '1', 'EX', seconds);
     } catch (error) {
-      console.error(`[通知服务] 设置冷却期失败:`, error.message);
+      logger.error("通知服务", "设置冷却期失败:", error.message);
     }
   }
 
@@ -163,7 +163,7 @@ class NotificationService {
     const { botToken, chatId } = this.telegram;
 
     if (!botToken || !chatId) {
-      console.warn(`[通知服务] Telegram 配置不完整，跳过发送`);
+      logger.warn("通知服务", "Telegram 配置不完整，跳过发送");
       return false;
     }
 
@@ -177,17 +177,17 @@ class NotificationService {
       });
 
       if (response.data.ok) {
-        console.log(`[${formatChinaTime()}] Telegram 通知发送成功`);
+        logger.log("通知服务", "Telegram 通知发送成功");
         return true;
       } else {
-        console.error(`[通知服务] Telegram API 返回失败:`, response.data);
+        logger.error("通知服务", "Telegram API 返回失败:", response.data);
         return false;
       }
     } catch (error) {
-      console.error(`[通知服务] Telegram 发送失败:`, error.message);
+      logger.error("通知服务", "Telegram 发送失败:", error.message);
       if (error.response) {
-        console.error(`[通知服务] 响应状态:`, error.response.status);
-        console.error(`[通知服务] 响应数据:`, JSON.stringify(error.response.data));
+        logger.error("通知服务", "响应状态:", error.response.status);
+        logger.error("通知服务", "响应数据:", JSON.stringify(error.response.data));
       }
       return false;
     }
@@ -210,7 +210,7 @@ class NotificationService {
         return { success, channel: 'telegram' };
 
       default:
-        console.warn(`[通知服务] 未知通知渠道: ${this.channel}`);
+        logger.warn("通知服务", `未知通知渠道: ${this.channel}`);
         return { success: false, error: 'Unknown channel' };
     }
   }
@@ -226,7 +226,7 @@ class NotificationService {
       // 1. 递增失败计数器
       const failureCount = await this.incrementFailureCount(error.message);
 
-      console.log(`[${formatChinaTime()}] API 失败计数: ${failureCount}/${this.failureThreshold}`);
+      logger.log("通知服务", `API 失败计数: ${failureCount}/${this.failureThreshold}`);
 
       // 2. 检查是否达到阈值
       if (failureCount < this.failureThreshold) {
@@ -236,32 +236,32 @@ class NotificationService {
       // 3. 检查是否在冷却期内
       const inCooldown = await this.isInCooldown();
       if (inCooldown) {
-        console.log(`[${formatChinaTime()}] 通知冷却期内，跳过发送`);
+        logger.log("通知服务", "通知冷却期内，跳过发送");
         return;
       }
 
       // 4. 获取错误详情
       const errorDetails = await this.getLastError();
       if (!errorDetails) {
-        console.warn(`[通知服务] 无法获取错误详情`);
+        logger.warn("通知服务", "无法获取错误详情");
         return;
       }
 
       // 5. 发送通知
-      console.log(`[${formatChinaTime()}] 达到失败阈值，准备发送通知...`);
+      logger.log("通知服务", "达到失败阈值，准备发送通知...");
       const result = await this.sendFailureNotification(errorDetails);
 
       if (result.success) {
         // 6. 设置冷却期
         await this.setCooldown();
-        console.log(`[${formatChinaTime()}] 通知已发送，冷却期: ${this.cooldownSeconds / 60} 分钟`);
+        logger.log("通知服务", `通知已发送，冷却期: ${this.cooldownSeconds / 60} 分钟`);
       } else if (result.skipped) {
-        console.log(`[${formatChinaTime()}] 通知功能未配置，跳过发送`);
+        logger.log("通知服务", "通知功能未配置，跳过发送");
       } else {
-        console.error(`[${formatChinaTime()}] 通知发送失败`);
+        logger.error("通知服务", "通知发送失败");
       }
     } catch (error) {
-      console.error(`[通知服务] 处理失败异常:`, error.message);
+      logger.error("通知服务", "处理失败异常:", error.message);
     }
   }
 }

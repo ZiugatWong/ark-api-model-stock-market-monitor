@@ -1,5 +1,6 @@
 const Redis = require('ioredis');
 const config = require('./env');
+const logger = require('../utils/logger');
 
 // 使用 URL 创建 Redis 客户端
 const redis = new Redis(config.redis.url, {
@@ -12,19 +13,19 @@ const redis = new Redis(config.redis.url, {
 
 // 连接事件
 redis.on('connect', () => {
-  console.log('[Redis] 已连接');
+  logger.info('Redis', '已连接');
 });
 
 redis.on('error', (err) => {
-  console.error('[Redis] 连接错误:', err.message);
+  logger.error('Redis', '连接错误:', err.message);
 });
 
 redis.on('ready', () => {
-  console.log('[Redis] 准备就绪');
+  logger.info('Redis', '准备就绪');
 });
 
 redis.on('reconnecting', () => {
-  console.log('[Redis] 正在重连...');
+  logger.info('Redis', '正在重连...');
 });
 
 module.exports = redis;

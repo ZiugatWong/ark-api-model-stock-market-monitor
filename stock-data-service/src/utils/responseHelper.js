@@ -3,6 +3,8 @@
  * 统一处理 Express 路由的响应和错误
  */
 
+const logger = require('./logger');
+
 /**
  * 发送成功响应
  * @param {Object} res - Express response 对象
@@ -40,7 +42,7 @@ function asyncHandler(routeName, handler) {
     try {
       await handler(req, res, next);
     } catch (error) {
-      console.error(`[API错误] ${routeName}:`, error.message);
+      logger.error('API错误', `${routeName}:`, error.message);
       sendError(res, '服务器内部错误', 500);
     }
   };

@@ -1,11 +1,12 @@
 require("dotenv").config();
+const logger = require("../utils/logger");
 
 // 必需的环境变量
 const required = ["WINDHUB_USER_ID", "WINDHUB_COOKIE"];
 
 for (const key of required) {
   if (!process.env[key]) {
-    console.error(`错误: 缺少必需的环境变量 ${key}`);
+    logger.error("环境配置", `缺少必需的环境变量 ${key}`);
     process.exit(1);
   }
 }
@@ -58,8 +59,9 @@ if (module.exports.notification.channel === "telegram") {
     !module.exports.notification.telegram.botToken ||
     !module.exports.notification.telegram.chatId
   ) {
-    console.warn(
-      "[警告] 通知配置不完整：缺少 Telegram 凭证，通知功能将无法使用"
+    logger.warn(
+      "环境配置",
+      "通知配置不完整：缺少 Telegram 凭证，通知功能将无法使用"
     );
   }
 }

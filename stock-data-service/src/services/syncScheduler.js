@@ -3,9 +3,13 @@ const redis = require("../config/redis");
 const windhubApi = require("./windhubApi");
 const notificationService = require("./notificationService");
 const config = require("../config/env");
-const { formatChinaTime } = require("../utils/timeUtils");
+const logger = require("../utils/logger");
 const REDIS_KEYS = require("../constants/redisKeys");
-const { DATA_RETENTION_SECONDS, DATA_TTL_SECONDS, CACHE_TTL } = require("../constants/business");
+const {
+  DATA_RETENTION_SECONDS,
+  DATA_TTL_SECONDS,
+  CACHE_TTL,
+} = require("../constants/business");
 
 class SyncScheduler {
   constructor() {
@@ -17,13 +21,13 @@ class SyncScheduler {
    */
   async syncPrices() {
     try {
-      console.log(`[${formatChinaTime()}] 开始同步价格数据...`);
+      logger.log("定时同步", "开始同步价格数据...");
 
       // 1. 调用Windhub API获取所有模型价格
       const marketData = await windhubApi.fetchMarketData();
 
       if (!marketData.stocks || marketData.stocks.length === 0) {
-        console.log(`[${formatChinaTime()}] API返回数据为空`);
+        logger.log("定时同步", "API返回数据为空");
         return;
       }
 
@@ -72,18 +76,20 @@ class SyncScheduler {
       // 成功后重置失败计数器
       await notificationService.resetFailureCount();
 
-      console.log(
-        `[${formatChinaTime()}] 同步完成，共 ${marketData.stocks.length} 个模型`,
+      logger.log(
+        "定时同步",
+        `同步完成，共 ${marketData.stocks.length} 个模型`,
       );
     } catch (error) {
-      console.error(`[${formatChinaTime()}] 同步失败:`, error.message);
+      logger.error("定时同步", "同步失败:", error.message);
 
       // 处理失败通知（不影响主流程）
       try {
         await notificationService.handleSyncFailure(error);
       } catch (notifyError) {
-        console.error(
-          `[${formatChinaTime()}] 通知服务异常:`,
+        logger.error(
+          "定时同步",
+          "通知服务异常:",
           notifyError.message,
         );
       }
@@ -93,7 +99,7 @@ class SyncScheduler {
   /**
    * 启动定时任务
    */
-  start() {
+  async start() {
     const cronExpression = config.sync.cron;
 
     // 验证Cron表达式
@@ -101,12 +107,20 @@ class SyncScheduler {
       throw new Error(`无效的Cron表达式: ${cronExpression}`);
     }
 
+    // 服务启动时清理错误通知计数器
+    try {
+      await notificationService.resetFailureCount();
+      logger.log("定时任务", "服务启动，已清理错误通知计数器");
+    } catch (error) {
+      logger.error("定时任务", "清理计数器失败:", error.message);
+    }
+
     // 启动定时任务
     this.task = cron.schedule(cronExpression, () => {
       this.syncPrices();
     });
 
-    console.log(`[定时任务] 已启动，Cron表达式: ${cronExpression}`);
+    logger.log("定时任务", `已启动，Cron表达式: ${cronExpression}`);
 
     // 立即执行一次
     this.syncPrices();
@@ -118,7 +132,7 @@ class SyncScheduler {
   stop() {
     if (this.task) {
       this.task.stop();
-      console.log("[定时任务] 已停止");
+      logger.log("定时任务", "已停止");
     }
   }
 }
