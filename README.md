@@ -14,11 +14,11 @@
 
 ### 日间模式
 
-[light_mode](https://raw.githubusercontent.com/ZiugatWong/ark-api-model-stock-market-monitor/main/assets/light_mode.png)
+![light_mode](https://raw.githubusercontent.com/ZiugatWong/ark-api-model-stock-market-monitor/main/assets/light_mode.png)
 
 ### 夜间模式
 
-[dark_mode](https://raw.githubusercontent.com/ZiugatWong/ark-api-model-stock-market-monitor/main/assets/dark_mode.png)
+![dark_mode](https://raw.githubusercontent.com/ZiugatWong/ark-api-model-stock-market-monitor/main/assets/dark_mode.png)
 
 ## 安装
 
