@@ -1108,7 +1108,8 @@
       overflow: visible;
     }
     #ark-stock-panel.visible { display: flex; }
-    #ark-stock-panel .panel-header {
+    /* ===== 通用面板标题栏 ===== */
+    .ark-panel-header {
       display: flex;
       align-items: center;
       padding: 10px 14px;
@@ -1118,62 +1119,98 @@
       border-bottom: 1px solid #333;
       border-radius: 10px 10px 0 0;
     }
-    #ark-stock-panel .panel-header .header-left {
+    .ark-panel-header .header-left {
       display: flex;
       align-items: center;
       gap: 10px;
     }
-    #ark-stock-panel .panel-header .header-right {
+    .ark-panel-header .header-right {
       margin-left: auto;
       display: flex;
       align-items: center;
       gap: 4px;
     }
-    #ark-stock-panel .panel-header .title {
+    .ark-panel-header .title {
       font-weight: 600;
       font-size: 14px;
       color: #f0f0f0;
     }
-    #ark-stock-panel .panel-header .close-btn {
+    .ark-panel-header .close-btn {
       background: none;
       border: none;
       color: #ff6b6b;
       font-size: 18px;
       cursor: pointer;
-      padding: 0;
+      padding: 0 4px;
       line-height: 1;
     }
-    #ark-stock-panel .panel-header .close-btn:hover { color: #ff8e8e; }
-    #ark-stock-panel .panel-header .data-maintenance-btn {
+    .ark-panel-header .close-btn:hover { color: #ff8e8e; }
+    .ark-panel-header .data-maintenance-btn {
       background: none;
       border: none;
       color: var(--ark-muted);
       font-size: 16px;
       cursor: pointer;
-      padding: 0;
+      padding: 0 4px;
       line-height: 1;
     }
-    #ark-stock-panel .panel-header .data-maintenance-btn:hover { color: #89b4fa; }
-    #ark-stock-panel .panel-header .theme-toggle-btn {
+    .ark-panel-header .data-maintenance-btn:hover { color: #89b4fa; }
+    .ark-panel-header .theme-toggle-btn {
       background: none;
       border: none;
       color: var(--ark-muted);
       font-size: 15px;
       cursor: pointer;
-      padding: 0;
+      padding: 0 4px;
       line-height: 1;
     }
-    #ark-stock-panel .panel-header .theme-toggle-btn:hover { color: #89b4fa; }
-    #ark-stock-panel .panel-header .settings-btn {
+    .ark-panel-header .theme-toggle-btn:hover { color: #89b4fa; }
+    .ark-panel-header .settings-btn {
       background: none;
       border: none;
       color: var(--ark-muted);
       font-size: 16px;
       cursor: pointer;
-      padding: 0;
+      padding: 0 4px;
       line-height: 1;
     }
-    #ark-stock-panel .panel-header .settings-btn:hover { color: #89b4fa; }
+    .ark-panel-header .settings-btn:hover { color: #89b4fa; }
+    /* 价格面板标题栏特有样式 */
+    .ark-panel-header .info-btn-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    .ark-panel-header .info-btn {
+      background: none;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 0 4px;
+      line-height: 1;
+      filter: grayscale(0.3);
+      transition: filter 0.2s;
+    }
+    .ark-panel-header .info-btn:hover { filter: grayscale(0); }
+    .ark-panel-header .info-tooltip {
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 6px;
+      padding: 8px 12px;
+      background: var(--ark-tooltip-bg, rgba(26,26,26,0.9));
+      border: 1px solid var(--ark-border, #333);
+      border-radius: 6px;
+      color: var(--ark-text, #f0f0f0);
+      font-size: 12px;
+      white-space: nowrap;
+      z-index: 2000;
+      backdrop-filter: blur(4px);
+      pointer-events: none;
+      line-height: 1.8;
+    }
+    .ark-panel-header .info-btn-wrap:hover .info-tooltip { display: block; }
     #ark-stock-panel .panel-body {
       padding: 8px 14px;
       overflow-y: visible;
@@ -1201,32 +1238,6 @@
       overflow: hidden;
     }
     #ark-settings-panel.visible { display: flex; }
-    #ark-settings-panel .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px;
-      background: #222;
-      cursor: move;
-      user-select: none;
-      border-bottom: 1px solid #333;
-      border-radius: 10px 10px 0 0;
-    }
-    #ark-settings-panel .panel-header .title {
-      font-weight: 600;
-      font-size: 14px;
-      color: #f0f0f0;
-    }
-    #ark-settings-panel .panel-header .close-btn {
-      background: none;
-      border: none;
-      color: #ff6b6b;
-      font-size: 18px;
-      cursor: pointer;
-      padding: 0 4px;
-      line-height: 1;
-    }
-    #ark-settings-panel .panel-header .close-btn:hover { color: #ff8e8e; }
     #ark-settings-panel .panel-body {
       padding: 12px 14px;
       overflow-y: auto;
@@ -1254,32 +1265,6 @@
       overflow: hidden;
     }
     #ark-data-maintenance-panel.visible { display: flex; }
-    #ark-data-maintenance-panel .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px;
-      background: #222;
-      cursor: move;
-      user-select: none;
-      border-bottom: 1px solid #333;
-      border-radius: 10px 10px 0 0;
-    }
-    #ark-data-maintenance-panel .panel-header .title {
-      font-weight: 600;
-      font-size: 14px;
-      color: #f0f0f0;
-    }
-    #ark-data-maintenance-panel .panel-header .close-btn {
-      background: none;
-      border: none;
-      color: #ff6b6b;
-      font-size: 18px;
-      cursor: pointer;
-      padding: 0 4px;
-      line-height: 1;
-    }
-    #ark-data-maintenance-panel .panel-header .close-btn:hover { color: #ff8e8e; }
     #ark-data-maintenance-panel .panel-body {
       padding: 12px 14px;
       overflow-y: auto;
@@ -1305,32 +1290,6 @@
       flex-direction: column;
     }
     #ark-price-panel.visible { display: flex; }
-    #ark-price-panel .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px;
-      background: #222;
-      cursor: move;
-      user-select: none;
-      border-bottom: 1px solid #333;
-      border-radius: 10px 10px 0 0;
-    }
-    #ark-price-panel .panel-header .title {
-      font-weight: 600;
-      font-size: 14px;
-      color: #f0f0f0;
-    }
-    #ark-price-panel .panel-header .close-btn {
-      background: none;
-      border: none;
-      color: #ff6b6b;
-      font-size: 18px;
-      cursor: pointer;
-      padding: 0 4px;
-      line-height: 1;
-    }
-    #ark-price-panel .panel-header .close-btn:hover { color: #ff8e8e; }
     #ark-price-panel .panel-body {
       padding: 12px 14px;
       background: #1a1a1a;
@@ -1358,32 +1317,6 @@
       overflow: hidden;
     }
     #ark-trades-panel.visible { display: flex; }
-    #ark-trades-panel .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px;
-      background: #222;
-      cursor: move;
-      user-select: none;
-      border-bottom: 1px solid #333;
-      border-radius: 10px 10px 0 0;
-    }
-    #ark-trades-panel .panel-header .title {
-      font-weight: 600;
-      font-size: 14px;
-      color: #f0f0f0;
-    }
-    #ark-trades-panel .panel-header .close-btn {
-      background: none;
-      border: none;
-      color: #ff6b6b;
-      font-size: 18px;
-      cursor: pointer;
-      padding: 0 4px;
-      line-height: 1;
-    }
-    #ark-trades-panel .panel-header .close-btn:hover { color: #ff8e8e; }
     #ark-trades-panel .panel-body {
       padding: 12px 14px;
       overflow-y: auto;
@@ -1417,32 +1350,6 @@
       overflow: hidden;
     }
     #ark-positions-panel.visible { display: flex; }
-    #ark-positions-panel .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px;
-      background: #222;
-      cursor: move;
-      user-select: none;
-      border-bottom: 1px solid #333;
-      border-radius: 10px 10px 0 0;
-    }
-    #ark-positions-panel .panel-header .title {
-      font-weight: 600;
-      font-size: 14px;
-      color: #f0f0f0;
-    }
-    #ark-positions-panel .panel-header .close-btn {
-      background: none;
-      border: none;
-      color: #ff6b6b;
-      font-size: 18px;
-      cursor: pointer;
-      padding: 0 4px;
-      line-height: 1;
-    }
-    #ark-positions-panel .panel-header .close-btn:hover { color: #ff8e8e; }
     #ark-positions-panel .panel-body {
       padding: 12px 14px;
       overflow-y: auto;
@@ -1472,32 +1379,6 @@
       overflow: hidden;
     }
     #ark-arbitrage-panel.visible { display: flex; }
-    #ark-arbitrage-panel .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px;
-      background: #222;
-      cursor: move;
-      user-select: none;
-      border-bottom: 1px solid #333;
-      border-radius: 10px 10px 0 0;
-    }
-    #ark-arbitrage-panel .panel-header .title {
-      font-weight: 600;
-      font-size: 14px;
-      color: #f0f0f0;
-    }
-    #ark-arbitrage-panel .panel-header .close-btn {
-      background: none;
-      border: none;
-      color: #ff6b6b;
-      font-size: 18px;
-      cursor: pointer;
-      padding: 0 4px;
-      line-height: 1;
-    }
-    #ark-arbitrage-panel .panel-header .close-btn:hover { color: #ff8e8e; }
     #ark-arbitrage-panel .panel-body {
       padding: 12px 14px;
       overflow-y: auto;
@@ -2206,13 +2087,7 @@
     }
 
     /* 标题栏 */
-    body.ark-theme-light #ark-stock-panel .panel-header,
-    body.ark-theme-light #ark-settings-panel .panel-header,
-    body.ark-theme-light #ark-data-maintenance-panel .panel-header,
-    body.ark-theme-light #ark-price-panel .panel-header,
-    body.ark-theme-light #ark-trades-panel .panel-header,
-    body.ark-theme-light #ark-positions-panel .panel-header,
-    body.ark-theme-light #ark-arbitrage-panel .panel-header,
+    body.ark-theme-light .ark-panel-header,
     body.ark-theme-light .ark-chart-panel .chart-header {
       background: var(--ark-elevated);
       border-bottom-color: var(--ark-border);
@@ -2230,13 +2105,7 @@
     }
 
     /* 标题文字 */
-    body.ark-theme-light #ark-stock-panel .panel-header .title,
-    body.ark-theme-light #ark-settings-panel .panel-header .title,
-    body.ark-theme-light #ark-data-maintenance-panel .panel-header .title,
-    body.ark-theme-light #ark-price-panel .panel-header .title,
-    body.ark-theme-light #ark-trades-panel .panel-header .title,
-    body.ark-theme-light #ark-positions-panel .panel-header .title,
-    body.ark-theme-light #ark-arbitrage-panel .panel-header .title,
+    body.ark-theme-light .ark-panel-header .title,
     body.ark-theme-light .ark-chart-panel .chart-header .chart-title {
       color: var(--ark-text);
     }
@@ -3229,7 +3098,7 @@
       this._mainPanel.id = "ark-stock-panel";
 
       this._mainPanel.innerHTML = `
-        <div class="panel-header">
+        <div class="ark-panel-header">
           <div class="header-left">
             <span class="title">Ark API 模型股市监控</span>
             <span style="color:var(--ark-label);font-size:12px;"> ver ${GM_info.script.version}</span>
@@ -3286,7 +3155,7 @@
       document.body.appendChild(this._mainPanel);
       Interactions.initDrag(
         this._mainPanel,
-        this._mainPanel.querySelector(".panel-header"),
+        this._mainPanel.querySelector(".ark-panel-header"),
       );
 
       this._mainPanel
@@ -3653,9 +3522,13 @@
       this._settingsPanel.id = "ark-settings-panel";
 
       this._settingsPanel.innerHTML = `
-        <div class="panel-header">
-          <span class="title">监控设置</span>
-          <button class="close-btn" title="关闭">&times;</button>
+        <div class="ark-panel-header">
+          <div class="header-left">
+            <span class="title">监控设置</span>
+          </div>
+          <div class="header-right">
+            <button class="close-btn" title="关闭">&times;</button>
+          </div>
         </div>
         <div class="panel-body">
           <div class="ark-section">
@@ -3735,7 +3608,7 @@
       document.body.appendChild(this._settingsPanel);
       Interactions.initDrag(
         this._settingsPanel,
-        this._settingsPanel.querySelector(".panel-header"),
+        this._settingsPanel.querySelector(".ark-panel-header"),
       );
 
       this._settingsPanel
@@ -3981,9 +3854,13 @@
       this._dataMaintenancePanel.id = "ark-data-maintenance-panel";
 
       this._dataMaintenancePanel.innerHTML = `
-        <div class="panel-header">
-          <span class="title">数据维护</span>
-          <button class="close-btn" title="关闭">&times;</button>
+        <div class="ark-panel-header">
+          <div class="header-left">
+            <span class="title">数据维护</span>
+          </div>
+          <div class="header-right">
+            <button class="close-btn" title="关闭">&times;</button>
+          </div>
         </div>
         <div class="panel-body">
           <div class="ark-section">
@@ -4029,7 +3906,7 @@
       document.body.appendChild(this._dataMaintenancePanel);
       Interactions.initDrag(
         this._dataMaintenancePanel,
-        this._dataMaintenancePanel.querySelector(".panel-header"),
+        this._dataMaintenancePanel.querySelector(".ark-panel-header"),
       );
 
       this._dataMaintenancePanel
@@ -4220,9 +4097,24 @@
       this._pricePanel.id = "ark-price-panel";
 
       this._pricePanel.innerHTML = `
-        <div class="panel-header">
-          <span class="title">最新价格<span style="color:var(--ark-label);font-size:12px;">（最近 ${CONFIG.TABLE_DISPLAY_LIMIT} 条）</span></span>
-          <button class="close-btn" title="关闭">&times;</button>
+        <div class="ark-panel-header">
+          <div class="header-left">
+            <span class="title">最新价格<span style="color:var(--ark-label);font-size:12px;">（最近 ${CONFIG.TABLE_DISPLAY_LIMIT} 条）</span></span>
+          </div>
+          <div class="header-right">
+          <span class="info-btn-wrap">
+              <button class="info-btn" title="">💡</button>
+              <span class="info-tooltip">
+                <div>小提示：</div>
+                <div>1. <span style="color:#F55454">红字</span>表示较前一时刻价格下跌，<span style="color:#00A854">绿字</span>表示较前一时刻价格上涨</div>
+                <div>2. 表头模型名称为<span style="color:#a855f7">紫色</span>表示有持仓，名称前的🔒表示持仓锁定中</div>
+                <div>3. 表头模型名称处右键点击可设置颜色标识（红/绿/黄/橙/粉/青），但优先级低于持仓颜色</div>
+                <div>4. 点击表头模型名称可查看该模型分时图：</div>
+                <pre>① 分时图窗口可拖拽改变大小\n② 分时图内拖拽可移动时间窗口\n③ 数据线和坐标轴处可通过鼠标滚轮实现范围缩放</pre>
+              </span>
+            </span>
+            <button class="close-btn" title="关闭">&times;</button>
+          </div>
         </div>
         <div class="panel-body">
           <div class="ark-section">
@@ -4246,7 +4138,7 @@
       document.body.appendChild(this._pricePanel);
       Interactions.initDrag(
         this._pricePanel,
-        this._pricePanel.querySelector(".panel-header"),
+        this._pricePanel.querySelector(".ark-panel-header"),
       );
 
       this._pricePanel
@@ -4303,9 +4195,13 @@
       this._tradesPanel.id = "ark-trades-panel";
 
       this._tradesPanel.innerHTML = `
-        <div class="panel-header">
-          <span class="title">我的交易</span>
-          <button class="close-btn" title="关闭">&times;</button>
+        <div class="ark-panel-header">
+          <div class="header-left">
+            <span class="title">我的交易</span>
+          </div>
+          <div class="header-right">
+            <button class="close-btn" title="关闭">&times;</button>
+          </div>
         </div>
         <div class="panel-body">
           <div class="ark-section">
@@ -4329,7 +4225,7 @@
       document.body.appendChild(this._tradesPanel);
       Interactions.initDrag(
         this._tradesPanel,
-        this._tradesPanel.querySelector(".panel-header"),
+        this._tradesPanel.querySelector(".ark-panel-header"),
       );
 
       this._tradesPanel
@@ -4385,9 +4281,13 @@
       this._positionsPanel.id = "ark-positions-panel";
 
       this._positionsPanel.innerHTML = `
-        <div class="panel-header">
-          <span class="title">我的持仓</span>
-          <button class="close-btn" title="关闭">&times;</button>
+        <div class="ark-panel-header">
+          <div class="header-left">
+            <span class="title">我的持仓</span>
+          </div>
+          <div class="header-right">
+            <button class="close-btn" title="关闭">&times;</button>
+          </div>
         </div>
         <div class="panel-body">
           <div class="ark-section">
@@ -4420,7 +4320,7 @@
       document.body.appendChild(this._positionsPanel);
       Interactions.initDrag(
         this._positionsPanel,
-        this._positionsPanel.querySelector(".panel-header"),
+        this._positionsPanel.querySelector(".ark-panel-header"),
       );
 
       this._positionsPanel
@@ -4440,9 +4340,13 @@
       this._arbitragePanel.id = "ark-arbitrage-panel";
 
       this._arbitragePanel.innerHTML = `
-        <div class="panel-header">
-          <span class="title">活跃套利榜</span>
-          <button class="close-btn" title="关闭">&times;</button>
+        <div class="ark-panel-header">
+          <div class="header-left">
+            <span class="title">活跃套利榜</span>
+          </div>
+          <div class="header-right">
+            <button class="close-btn" title="关闭">&times;</button>
+          </div>
         </div>
         <div class="panel-body">
           <div class="ark-arbitrage-controls">
@@ -4475,7 +4379,7 @@
       document.body.appendChild(this._arbitragePanel);
       Interactions.initDrag(
         this._arbitragePanel,
-        this._arbitragePanel.querySelector(".panel-header"),
+        this._arbitragePanel.querySelector(".ark-panel-header"),
       );
 
       this._arbitragePanel
@@ -4692,17 +4596,6 @@
         html += "</tr>";
       }
       html += "</tbody></table>";
-      html += `
-        <div style="margin-top: 8px; font-size: 11px; color: var(--ark-muted); text-align: left; padding: 0 4px;">
-          注1 : <span style="color:#F55454">红字</span>表示较前一时刻价格下跌，<span style="color:#00A854">绿字</span>表示较前一时刻价格上涨
-        </div>
-        <div style="margin-top: 8px; font-size: 11px; color: var(--ark-muted); text-align: left; padding: 0 4px;">
-          注2 : 点击表头模型名称查看分时图，名称为<span style="color:#a855f7">紫色</span>表示有持仓，名称前的🔒表示持仓锁定中
-        </div>
-        <div style="margin-top: 8px; font-size: 11px; color: var(--ark-muted); text-align: left; padding: 0 4px;">
-          注3 : 右键点击模型名称可设置颜色标识（红/绿/黄/橙/粉/青）
-        </div>
-      `;
 
       wrap.innerHTML = html;
 
@@ -5166,7 +5059,7 @@
         panelId = panelIdOrHandle;
         handle =
           el.querySelector(".chart-header") ||
-          el.querySelector(".panel-header");
+          el.querySelector(".ark-panel-header");
       } else {
         handle = panelIdOrHandle;
       }
