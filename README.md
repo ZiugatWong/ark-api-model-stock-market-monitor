@@ -10,6 +10,16 @@
 
 为 windhub.cc 的 Ark API 模型股票提供实时价格监控和数据分析。
 
+## 界面预览
+
+### 日间模式
+
+[light_mode](https://raw.githubusercontent.com/ZiugatWong/ark-api-model-stock-market-monitor/main/assets/light_mode.png)
+
+### 夜间模式
+
+[dark_mode](https://raw.githubusercontent.com/ZiugatWong/ark-api-model-stock-market-monitor/main/assets/dark_mode.png)
+
 ## 安装
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展
@@ -178,7 +188,7 @@
 - 自动获取设置（分钟尾数触发器）
 - 价格突破通知配置（向上/向下突破价格）
 - 通知方式设置（弹窗、声音、Telegram 推送）
-- ⚠️ Telegram 通知第一次推送时需要请求脚本的跨域权限，同意即可
+- ⚠️ Telegram 通知第一次推送时会请求脚本的跨域权限，同意即可
 - 测试配置后的通知提醒
 
 ### 7. 数据维护
@@ -193,13 +203,15 @@
 │   注: 第二天第一次获取数据时自动清理超期数据             │
 │                                                   │
 │ 数据同步                                           │
-│   功能开发中，敬请期待...                            │
+│   数据服务地址： [ http://xxxx ]                      │
+|   [价格同步]                                       │
 └───────────────────────────────────────────────────┘
 ```
 
 **功能：**
 - 设置价格数据保留天数（默认 7 天）
 - 自动清理超期旧数据
+- 支持从远程数据服务同步历史数据（第一次同步会请求脚本的跨域权限，同意即可）
 
 ## 分时走势图
 
