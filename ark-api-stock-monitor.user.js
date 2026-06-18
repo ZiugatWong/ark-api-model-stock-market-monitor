@@ -26,6 +26,14 @@
     STORAGE_KEY: "windhub_stock_data",
     TABLE_DISPLAY_LIMIT: 5,
     CACHE_DURATION: 5 * 60 * 1000,
+    MODEL_COLORS: [
+      { name: "红", value: "#F55454" },
+      { name: "绿", value: "#00A854" },
+      { name: "黄", value: "#EAB308" },
+      { name: "橙", value: "#F97316" },
+      { name: "粉", value: "#EC4899" },
+      { name: "青", value: "#06B6D4" },
+    ],
   };
 
   const DEFAULT_DATA = {
@@ -49,6 +57,7 @@
     arbitrageData: { today: [], yesterday: [] },
     arbitrageDataLastDate: null,
     positions: {},
+    modelColors: {},
     priceDataDaysLimit: 7,
     lastPriceDataCleanDate: null,
     dataServiceUrl: "http://localhost:3210",
@@ -85,6 +94,7 @@
           arbitrageData: d.arbitrageData || { today: [], yesterday: [] },
           arbitrageDataLastDate: d.arbitrageDataLastDate || null,
           positions: d.positions || {},
+          modelColors: d.modelColors || {},
           priceDataDaysLimit: d.priceDataDaysLimit || 7,
           lastPriceDataCleanDate: d.lastPriceDataCleanDate || null,
           dataServiceUrl: d.dataServiceUrl || "http://localhost:3210",
@@ -2341,9 +2351,78 @@
       background: var(--ark-border-2);
     }
 
+    /* 颜色选择菜单 */
+    .ark-color-menu {
+      position: absolute;
+      z-index: 9999;
+      background: var(--ark-popup-bg);
+      border: 1px solid var(--ark-border);
+      border-radius: 8px;
+      box-shadow: 0 4px 20px var(--ark-shadow);
+      padding: 12px;
+      min-width: 100px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .ark-color-menu-title {
+      font-size: 12px;
+      color: var(--ark-muted);
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--ark-border);
+      text-align: center;
+    }
+    .ark-color-options {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+    }
+    .ark-color-option {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 6px;
+      transition: background 0.2s ease;
+      width: 100%;
+    }
+    .ark-color-option:hover {
+      background: var(--ark-popup-item);
+    }
+    .ark-color-swatch {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    .ark-color-option:hover .ark-color-swatch {
+      transform: scale(1.1);
+    }
+    .ark-color-remove {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: var(--ark-chip);
+      color: var(--ark-text);
+      font-size: 12px;
+      margin-top: 8px;
+      border: none;
+      width: 100%;
+      transition: background 0.2s ease;
+    }
+    .ark-color-remove:hover {
+      background: var(--ark-btn-2-hover);
+    }
+
     /* 开关打开态 */
-    body.ark-theme-light .ark-toggle input:checked + .slider { 
-      background: #4caf50; 
+    body.ark-theme-light .ark-toggle input:checked + .slider {
+      background: #4caf50;
     }
 
     /* 图表面板：tooltip / loading 遮罩 */
@@ -4579,6 +4658,7 @@
 
       const now = Math.floor(Date.now() / 1000);
       const positions = data.positions || {};
+      const modelColors = data.modelColors || {};
 
       let html =
         '<table class="ark-price-table"><thead><tr><th class="time-cell">时间</th>';
@@ -4592,6 +4672,8 @@
             displayName = "🔒 " + displayName;
           }
           linkStyle = ' style="color:#a855f7"';
+        } else if (modelColors[m]) {
+          linkStyle = ` style="color:${modelColors[m]}"`;
         }
 
         html += `<th><a href="javascript:void(0)" class="model-chart-link" data-model="${Utils.escapeHtml(m)}"${linkStyle}>${displayName}</a></th>`;
@@ -4617,6 +4699,9 @@
         <div style="margin-top: 8px; font-size: 11px; color: var(--ark-muted); text-align: left; padding: 0 4px;">
           注2 : 点击表头模型名称查看分时图，名称为<span style="color:#a855f7">紫色</span>表示有持仓，名称前的🔒表示持仓锁定中
         </div>
+        <div style="margin-top: 8px; font-size: 11px; color: var(--ark-muted); text-align: left; padding: 0 4px;">
+          注3 : 右键点击模型名称可设置颜色标识（红/绿/黄/橙/粉/青）
+        </div>
       `;
 
       wrap.innerHTML = html;
@@ -4630,6 +4715,13 @@
             ChartManager.showChartPanel(modelName).catch((error) => {
               console.error("[Ark Stock Monitor] 打开分时走势图失败:", error);
             });
+          });
+
+          // 添加右键事件监听
+          link.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            const modelName = link.getAttribute("data-model");
+            UIRenderers.showColorMenu(e, modelName, data);
           });
         });
       }, 100);
@@ -4666,6 +4758,103 @@
       }
 
       return null;
+    },
+
+    showColorMenu(e, modelName, data) {
+      // 移除现有的颜色菜单
+      const existingMenu = document.querySelector(".ark-color-menu");
+      if (existingMenu) {
+        existingMenu.remove();
+      }
+
+      // 创建菜单容器
+      const menu = document.createElement("div");
+      menu.className = "ark-color-menu";
+
+      // 设置菜单位置
+      menu.style.left = e.pageX + "px";
+      menu.style.top = e.pageY + "px";
+
+      // 获取当前颜色
+      const currentColor = data.modelColors?.[modelName];
+      const hasPosition = data.positions?.[modelName];
+
+      // 构建菜单内容
+      let menuHtml = '<div class="ark-color-menu-title">选择颜色</div>';
+      menuHtml += '<div class="ark-color-options">';
+
+      // 显示可用颜色选项
+      for (const color of CONFIG.MODEL_COLORS) {
+        // 如果已经有颜色且不等于当前颜色，显示所有颜色
+        // 如果还没有颜色，显示所有6种颜色
+        if (!currentColor || color.value !== currentColor) {
+          menuHtml += `
+            <div class="ark-color-option" data-color="${color.value}">
+              <div class="ark-color-swatch" style="background-color: ${color.value}"></div>
+            </div>
+          `;
+        }
+      }
+
+      menuHtml += "</div>";
+
+      // 如果已经有颜色，显示"取消标识"按钮
+      if (currentColor) {
+        menuHtml += '<button class="ark-color-remove">移除颜色</button>';
+      }
+
+      menu.innerHTML = menuHtml;
+
+      // 添加到页面
+      document.body.appendChild(menu);
+
+      // 添加颜色选择事件
+      menu.querySelectorAll(".ark-color-option").forEach((option) => {
+        option.addEventListener("click", () => {
+          const color = option.getAttribute("data-color");
+          UIRenderers.setModelColor(modelName, color, data);
+          menu.remove();
+        });
+      });
+
+      // 添加取消标识事件
+      const removeBtn = menu.querySelector(".ark-color-remove");
+      if (removeBtn) {
+        removeBtn.addEventListener("click", () => {
+          UIRenderers.removeModelColor(modelName, data);
+          menu.remove();
+        });
+      }
+
+      // 点击外部关闭菜单
+      const closeMenu = (event) => {
+        if (!menu.contains(event.target)) {
+          menu.remove();
+          document.removeEventListener("click", closeMenu);
+        }
+      };
+
+      // 使用 setTimeout 避免立即触发关闭
+      setTimeout(() => {
+        document.addEventListener("click", closeMenu);
+      }, 0);
+    },
+
+    setModelColor(modelName, color, data) {
+      if (!data.modelColors) {
+        data.modelColors = {};
+      }
+      data.modelColors[modelName] = color;
+      Storage.save(data);
+      this.refreshPriceTable(data);
+    },
+
+    removeModelColor(modelName, data) {
+      if (data.modelColors && data.modelColors[modelName]) {
+        delete data.modelColors[modelName];
+        Storage.save(data);
+        this.refreshPriceTable(data);
+      }
     },
 
     renderTradesTable(modelName) {
