@@ -68,12 +68,20 @@
 
   // ==================== 存储 ====================
   const Storage = {
+    _cache: null,
+    _persistTimer: null,
+
     load() {
+      if (this._cache) return this._cache;
+
       const raw = GM_getValue(CONFIG.STORAGE_KEY, null);
-      if (!raw) return JSON.parse(JSON.stringify(DEFAULT_DATA));
+      if (!raw) {
+        this._cache = JSON.parse(JSON.stringify(DEFAULT_DATA));
+        return this._cache;
+      }
       try {
         const d = typeof raw === "string" ? JSON.parse(raw) : raw;
-        return {
+        this._cache = {
           models: d.models || [],
           autoTriggerMinuteEnds: d.autoTriggerMinuteEnds || "3,8",
           autoTrigger: !!d.autoTrigger,
@@ -103,12 +111,34 @@
             d.holdingsTotalValue !== undefined ? d.holdingsTotalValue : null,
           theme: d.theme === "light" ? "light" : "dark",
         };
+        return this._cache;
       } catch {
-        return JSON.parse(JSON.stringify(DEFAULT_DATA));
+        this._cache = JSON.parse(JSON.stringify(DEFAULT_DATA));
+        return this._cache;
       }
     },
+
     save(data) {
-      GM_setValue(CONFIG.STORAGE_KEY, data);
+      this._cache = data;
+      this._schedulePersist();
+    },
+
+    _schedulePersist() {
+      if (this._persistTimer) clearTimeout(this._persistTimer);
+      this._persistTimer = setTimeout(() => {
+        GM_setValue(CONFIG.STORAGE_KEY, this._cache);
+        this._persistTimer = null;
+      }, 100);
+    },
+
+    flush() {
+      if (this._persistTimer) {
+        clearTimeout(this._persistTimer);
+        this._persistTimer = null;
+      }
+      if (this._cache) {
+        GM_setValue(CONFIG.STORAGE_KEY, this._cache);
+      }
     },
   };
 
@@ -5331,5 +5361,11 @@
     UIPanels._pricePanel.classList.add("visible");
     UIPanels.bringToFront(UIPanels._pricePanel);
     UIRenderers.refreshPricePanelFull();
+  });
+
+  // 页面关闭 / 切到后台时立即持久化存储，防止 debounce 导致数据丢失
+  window.addEventListener("beforeunload", () => Storage.flush());
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) Storage.flush();
   });
 })();
