@@ -2,7 +2,7 @@
 // @name         Ark API 模型股市监控
 // @description  Ark API 模型股市数据聚合分析与价格变动通知
 // @namespace    http://tampermonkey.net/
-// @version      1.0.0
+// @version      1.0.1
 // @author       ziugat
 // @license      GPL-3.0
 // @homepage     https://github.com/ZiugatWong/ark-api-model-stock-market-monitor
@@ -321,9 +321,7 @@
         if (!newRecords || newRecords.length === 0) continue;
 
         // 获取新数据的时间范围
-        const newTimestamps = newRecords.map((r) =>
-          r[0],
-        );
+        const newTimestamps = newRecords.map((r) => r[0]);
         const minTs = Math.min(...newTimestamps);
         const maxTs = Math.max(...newTimestamps);
 
@@ -666,10 +664,12 @@
         const cutoffTime = Math.floor(daysAgo.getTime() / 1000);
 
         for (const modelName of Object.keys(data.priceData)) {
-          data.priceData[modelName] = data.priceData[modelName].filter((item) => {
-            const ts = item[0];
-            return ts >= cutoffTime;
-          });
+          data.priceData[modelName] = data.priceData[modelName].filter(
+            (item) => {
+              const ts = item[0];
+              return ts >= cutoffTime;
+            },
+          );
         }
         data.lastPriceDataCleanDate = today;
       }
@@ -2403,7 +2403,8 @@
       if (!Array.isArray(rawData)) return [];
       return rawData
         .map((item) => {
-          if (!item || item[0] === undefined || item[1] === undefined) return null;
+          if (!item || item[0] === undefined || item[1] === undefined)
+            return null;
           return { time: item[0], value: parseFloat(item[1]) };
         })
         .filter(Boolean)
@@ -2437,18 +2438,72 @@
       };
     },
 
-    convertToMarkers(trades) {
+    // 二分查找：在有序数组中找 <= target 的最大索引，没有则返回 -1
+    findFloor(sortedArr, target) {
+      let lo = 0,
+        hi = sortedArr.length - 1,
+        best = -1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (sortedArr[mid] <= target) {
+          best = mid;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      return best;
+    },
+
+    // 将间隔过大的交易价格作为数据点补入 chartData，使标记垂直位置准确
+    enrichWithTradePrices(chartData, trades, maxGapSeconds = 300) {
+      if (!chartData || chartData.length === 0) return chartData;
+      if (!trades || trades.length === 0) return chartData;
+
+      const timestamps = chartData.map((d) => d.time);
+      const newPointsMap = new Map();
+
+      for (const trade of trades) {
+        if (!trade.created_at || trade.price === undefined) continue;
+        const idx = this.findFloor(timestamps, trade.created_at);
+        if (idx === -1 || trade.created_at - timestamps[idx] > maxGapSeconds) {
+          newPointsMap.set(trade.created_at, parseFloat(trade.price));
+        }
+      }
+
+      if (newPointsMap.size === 0) return chartData;
+
+      const newPoints = Array.from(newPointsMap, ([time, value]) => ({
+        time,
+        value,
+      }));
+      const enriched = [...chartData, ...newPoints];
+      enriched.sort((a, b) => a.time - b.time);
+      return enriched;
+    },
+
+    convertToMarkers(trades, chartData) {
       if (!Array.isArray(trades) || trades.length === 0) return [];
+
+      const timestamps = chartData ? chartData.map((d) => d.time) : [];
+
       return trades
         .filter((t) => t.created_at && t.side)
-        .map((trade) => ({
-          time: trade.created_at,
-          position: trade.side === "buy" ? "belowBar" : "aboveBar",
-          color: trade.side === "buy" ? "#F55454" : "#00A854",
-          shape: "circle",
-          text: trade.side === "buy" ? "买" : "卖",
-          size: 1,
-        }));
+        .map((trade) => {
+          const idx =
+            timestamps.length > 0
+              ? this.findFloor(timestamps, trade.created_at)
+              : -1;
+          const markerTime = idx !== -1 ? timestamps[idx] : trade.created_at;
+          return {
+            time: markerTime,
+            position: "inBar",
+            color: trade.side === "buy" ? "#F55454" : "#00A854",
+            shape: "circle",
+            text: trade.side === "buy" ? "买" : "卖",
+            size: 1,
+          };
+        });
     },
 
     createThemedChart(container) {
@@ -2741,7 +2796,14 @@
           (t) => t.created_at >= minTime,
         );
         if (filteredTrades.length > 0) {
-          const markers = Chart.convertToMarkers(filteredTrades);
+          const enrichedChartData = Chart.enrichWithTradePrices(
+            chartData,
+            filteredTrades,
+          );
+          const markers = Chart.convertToMarkers(
+            filteredTrades,
+            enrichedChartData,
+          );
           if (markers.length > 0) {
             series.setMarkers(markers);
           }
@@ -2826,12 +2888,19 @@
         const chartData = Chart.convertToChartData(modelData);
         if (chartData.length === 0) throw new Error("数据转换失败");
 
+        // 将交易价格作为数据点补入 chartData，保证标记垂直位置准确
+        const trades = data.tradeHistory?.[modelName];
+        const enrichedChartData = Chart.enrichWithTradePrices(
+          chartData,
+          trades,
+        );
+
         const chart = await Chart.createThemedChart(container);
-        const series = Chart.createPriceLineSeries(chart, chartData);
+        const series = Chart.createPriceLineSeries(chart, enrichedChartData);
 
         const { stats, priceLines } = this._updateChartSeriesData(
           series,
-          chartData,
+          enrichedChartData,
           modelName,
           data,
         );
@@ -2848,14 +2917,14 @@
         this.setChartInstance(panelId, chartId, {
           chart,
           series,
-          chartData,
+          chartData: enrichedChartData,
           priceLines,
         });
 
         Chart.updateChartStatsDisplay(chartPanel, stats, panelId);
 
-        if (chartData.length > 1) {
-          const lastTime = chartData[chartData.length - 1].time;
+        if (enrichedChartData.length > 1) {
+          const lastTime = enrichedChartData[enrichedChartData.length - 1].time;
           chart.timeScale().setVisibleRange({
             from: getYesterdayMorningTimestamp(),
             to: lastTime,
@@ -3001,8 +3070,14 @@
         const chartData = Chart.convertToChartData(modelData);
         if (chartData.length === 0) throw new Error("数据转换失败");
 
-        instance.series.setData(chartData);
-        instance.chartData = chartData;
+        const trades = data.tradeHistory?.[panelInfo.modelName];
+        const enrichedChartData = Chart.enrichWithTradePrices(
+          chartData,
+          trades,
+        );
+
+        instance.series.setData(enrichedChartData);
+        instance.chartData = enrichedChartData;
 
         if (instance.priceLines) {
           if (instance.priceLines.highLine) {
@@ -3018,7 +3093,7 @@
 
         const { stats, priceLines } = this._updateChartSeriesData(
           instance.series,
-          chartData,
+          enrichedChartData,
           panelInfo.modelName,
           data,
         );
@@ -3028,8 +3103,8 @@
           Chart.updateChartStatsDisplay(panelInfo.element, stats, panelId);
         }
 
-        if (chartData.length > 1) {
-          const lastTime = chartData[chartData.length - 1].time;
+        if (enrichedChartData.length > 1) {
+          const lastTime = enrichedChartData[enrichedChartData.length - 1].time;
           instance.chart.timeScale().setVisibleRange({
             from: getYesterdayMorningTimestamp(),
             to: lastTime,
@@ -4732,10 +4807,7 @@
         const row = document.createElement("tr");
         const timeCell = document.createElement("td");
         timeCell.className = "time-cell";
-        timeCell.textContent = TimeUtils.formatSecondsTimestamp(
-          ts,
-          "short",
-        );
+        timeCell.textContent = TimeUtils.formatSecondsTimestamp(ts, "short");
         row.appendChild(timeCell);
 
         for (const m of models) {
@@ -4788,13 +4860,7 @@
       }
     },
 
-    _patchPriceCells(
-      wrap,
-      models,
-      timestampsDesc,
-      priceMap,
-      bgColorMap,
-    ) {
+    _patchPriceCells(wrap, models, timestampsDesc, priceMap, bgColorMap) {
       const rows = wrap.querySelectorAll("tbody tr");
       for (let i = 0; i < timestampsDesc.length; i++) {
         const ts = timestampsDesc[i];
