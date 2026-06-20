@@ -2466,7 +2466,9 @@
       for (const trade of trades) {
         if (!trade.created_at || trade.price === undefined) continue;
         const idx = this.findFloor(timestamps, trade.created_at);
-        if (idx === -1 || trade.created_at - timestamps[idx] > maxGapSeconds) {
+        // 交易时间早于价格数据最早时间，跳过（不补为价格数据点）
+        if (idx === -1) continue;
+        if (trade.created_at - timestamps[idx] > maxGapSeconds) {
           newPointsMap.set(trade.created_at, parseFloat(trade.price));
         }
       }
@@ -2494,7 +2496,9 @@
             timestamps.length > 0
               ? this.findFloor(timestamps, trade.created_at)
               : -1;
-          const markerTime = idx !== -1 ? timestamps[idx] : trade.created_at;
+          // 交易时间早于价格数据最早时间，无法确定吸附位置，跳过该标记
+          if (idx === -1) return null;
+          const markerTime = timestamps[idx];
           return {
             time: markerTime,
             position: "inBar",
@@ -2503,7 +2507,8 @@
             text: trade.side === "buy" ? "买" : "卖",
             size: 1,
           };
-        });
+        })
+        .filter(Boolean);
     },
 
     createThemedChart(container) {
