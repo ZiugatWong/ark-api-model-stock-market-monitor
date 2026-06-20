@@ -2,7 +2,7 @@
 // @name         Ark API 模型股市监控
 // @description  Ark API 模型股市数据聚合分析与价格变动通知
 // @namespace    http://tampermonkey.net/
-// @version      1.0.1
+// @version      1.0.2
 // @author       ziugat
 // @license      GPL-3.0
 // @homepage     https://github.com/ZiugatWong/ark-api-model-stock-market-monitor
@@ -2750,7 +2750,13 @@
       return `ark-chart-panel-${modelName.replace(/[^a-zA-Z0-9-]/g, "-")}-${timestamp}-${random}`;
     }
 
-    _updateChartSeriesData(series, chartData, modelName, data, showLabels = true) {
+    _updateChartSeriesData(
+      series,
+      chartData,
+      modelName,
+      data,
+      showLabels = true,
+    ) {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
       const todayStartTimestamp = Math.floor(todayStart.getTime() / 1000);
@@ -3171,7 +3177,9 @@
         }
 
         // 获取勾选框状态
-        const checkbox = panelInfo.element?.querySelector(`#${panelId}-show-labels`);
+        const checkbox = panelInfo.element?.querySelector(
+          `#${panelId}-show-labels`,
+        );
         const showLabels = checkbox ? checkbox.checked : true;
 
         const { stats, priceLines } = this._updateChartSeriesData(
@@ -3186,7 +3194,9 @@
         if (stats) {
           Chart.updateChartStatsDisplay(panelInfo.element, stats, panelId);
           // 重新绑定勾选框事件
-          const newCheckbox = panelInfo.element?.querySelector(`#${panelId}-show-labels`);
+          const newCheckbox = panelInfo.element?.querySelector(
+            `#${panelId}-show-labels`,
+          );
           if (newCheckbox) {
             newCheckbox.checked = showLabels;
             newCheckbox.addEventListener("change", () => {
