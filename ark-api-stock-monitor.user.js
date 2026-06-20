@@ -51,7 +51,7 @@
       telegramChatId: null,
     },
     notifications: {},
-    data: {},
+    priceData: {},
     tradeHistory: {},
     tradeHistoryLastFetched: null,
     arbitrageData: { today: [], yesterday: [] },
@@ -85,7 +85,7 @@
           models: d.models || [],
           autoTriggerMinuteEnds: d.autoTriggerMinuteEnds || "3,8",
           autoTrigger: !!d.autoTrigger,
-          data: d.data || {},
+          priceData: d.priceData || {},
           lastUpdateTime: d.lastUpdateTime || null,
           availableModels: d.availableModels || [],
           availableModelsLastFetched: d.availableModelsLastFetched || null,
@@ -310,7 +310,7 @@
 
     // 智能合并价格数据
     mergePriceData(existingData, newData) {
-      // existingData: 当前存储的 data.data
+      // existingData: 当前存储的 data.priceData
       // newData: 从服务获取的数据（已转换格式）
 
       const merged = { ...existingData };
@@ -585,11 +585,11 @@
         const price = parseFloat(stock.current_price.toFixed(2));
         const ts = String(stock.last_update);
 
-        if (!data.data[stock.model_name]) {
-          data.data[stock.model_name] = [];
+        if (!data.priceData[stock.model_name]) {
+          data.priceData[stock.model_name] = [];
         }
 
-        const list = data.data[stock.model_name];
+        const list = data.priceData[stock.model_name];
         const exists = list.some((item) => item[0] === ts);
         if (!exists) {
           list.push([ts, price]);
@@ -665,8 +665,8 @@
         daysAgo.setHours(0, 0, 0, 0);
         const cutoffTime = Math.floor(daysAgo.getTime() / 1000);
 
-        for (const modelName of Object.keys(data.data)) {
-          data.data[modelName] = data.data[modelName].filter((item) => {
+        for (const modelName of Object.keys(data.priceData)) {
+          data.priceData[modelName] = data.priceData[modelName].filter((item) => {
             const ts = Number(item[0]);
             return ts >= cutoffTime;
           });
@@ -761,7 +761,7 @@
         if (deduplicatedModels.includes(model)) continue;
 
         const config = notifications[model];
-        const modelData = data.data[model];
+        const modelData = data.priceData[model];
         if (!modelData || modelData.length < 2) continue;
 
         const latest = modelData[modelData.length - 1];
@@ -2812,7 +2812,7 @@
     async createTimeChartPanel(modelName, panelId) {
       try {
         const data = Storage.load();
-        const modelData = data.data[modelName];
+        const modelData = data.priceData[modelName];
         if (!modelData || !Array.isArray(modelData) || modelData.length === 0) {
           throw new Error(`模型 "${modelName}" 暂无价格数据`);
         }
@@ -2983,7 +2983,7 @@
         this.showChartLoading(panelId, true);
 
         const data = Storage.load();
-        const modelData = data.data[panelInfo.modelName];
+        const modelData = data.priceData[panelInfo.modelName];
         if (!modelData || !Array.isArray(modelData)) {
           throw new Error(`模型 "${panelInfo.modelName}" 暂无数据`);
         }
@@ -3353,7 +3353,7 @@
         if (newModels.length === 0) return;
         d.models.push(...newModels);
         newModels.forEach((model) => {
-          if (!d.data[model]) d.data[model] = [];
+          if (!d.priceData[model]) d.priceData[model] = [];
         });
         Storage.save(d);
         UIRenderers.renderModelList(d.models);
@@ -4077,12 +4077,12 @@
 
           // 合并数据（价格特定）
           const { merged, totalAdded, totalRemoved } = Utils.mergePriceData(
-            d.data,
+            d.priceData,
             converted,
           );
 
           // 保存
-          d.data = merged;
+          d.priceData = merged;
           Storage.save(d);
 
           // 更新存储大小显示
@@ -4502,7 +4502,7 @@
       if (!wrap) return;
 
       const models = data.models || [];
-      const allData = data.data || {};
+      const allData = data.priceData || {};
 
       if (models.length === 0) {
         wrap.innerHTML =
@@ -5210,8 +5210,8 @@
             // Add model to monitored list
             if (!data.models.includes(modelName)) {
               data.models.push(modelName);
-              if (!data.data[modelName]) {
-                data.data[modelName] = [];
+              if (!data.priceData[modelName]) {
+                data.priceData[modelName] = [];
               }
               Storage.save(data);
               UIRenderers.renderModelList(data.models);
