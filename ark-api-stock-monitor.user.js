@@ -2661,7 +2661,7 @@
         </div>
         <div class="chart-body">
           <div id="${panelId}-container" class="ark-chart-container"></div>
-          <div id="${panelId}-stats" class="ark-chart-stats" style="margin-top: 16px; font-size: 12px; color: var(--ark-muted);"></div>
+          <div id="${panelId}-stats" class="ark-chart-stats" style="margin-top: 16px; font-size: 12px; color: var(--ark-muted); display: flex; justify-content: space-between; align-items: center;"></div>
           <div id="${panelId}-error" class="ark-chart-error" style="display: none;"></div>
         </div>
         <div class="resize-handle resize-handle-n"></div>
@@ -2688,6 +2688,10 @@
           <div><strong>更新至：</strong>${TimeUtils.formatSecondsTimestamp(stats.timeRange.end, "full")}</div>
           <div><strong>今日最高价：</strong> ${stats.max.toFixed(2)}</div>
           <div><strong>今日最低价：</strong> ${stats.min.toFixed(2)}</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <input type="checkbox" id="${panelId}-show-labels" checked style="cursor: pointer;" />
+          <label for="${panelId}-show-labels" style="cursor: pointer; font-size: 12px; user-select: none;">显示价格线标签</label>
         </div>
       `;
     },
@@ -2746,7 +2750,7 @@
       return `ark-chart-panel-${modelName.replace(/[^a-zA-Z0-9-]/g, "-")}-${timestamp}-${random}`;
     }
 
-    _updateChartSeriesData(series, chartData, modelName, data) {
+    _updateChartSeriesData(series, chartData, modelName, data, showLabels = true) {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
       const todayStartTimestamp = Math.floor(todayStart.getTime() / 1000);
@@ -2770,7 +2774,7 @@
           lineWidth: 1,
           lineStyle: 2,
           axisLabelVisible: true,
-          title: "今日最高",
+          title: showLabels ? "今日最高" : "",
         });
         const lowLine = series.createPriceLine({
           price: modelArbitrage.low_24h,
@@ -2778,7 +2782,7 @@
           lineWidth: 1,
           lineStyle: 2,
           axisLabelVisible: true,
-          title: "今日最低",
+          title: showLabels ? "今日最低" : "",
         });
         let positionLine = null;
         if (modelPosition) {
@@ -2788,7 +2792,7 @@
             lineWidth: 1,
             lineStyle: 2,
             axisLabelVisible: true,
-            title: "持仓价",
+            title: showLabels ? "持仓价" : "",
           });
         }
         priceLines = { highLine, lowLine, positionLine };
@@ -2908,6 +2912,7 @@
           enrichedChartData,
           modelName,
           data,
+          true, // 默认显示标签
         );
 
         const cleanupTooltip = Chart.createChartTooltip(
@@ -2927,6 +2932,14 @@
         });
 
         Chart.updateChartStatsDisplay(chartPanel, stats, panelId);
+
+        // 绑定勾选框事件
+        const checkbox = chartPanel.querySelector(`#${panelId}-show-labels`);
+        if (checkbox) {
+          checkbox.addEventListener("change", () => {
+            this._togglePriceLineLabels(panelId, checkbox.checked);
+          });
+        }
 
         if (enrichedChartData.length > 1) {
           const lastTime = enrichedChartData[enrichedChartData.length - 1].time;
@@ -3047,6 +3060,67 @@
       if (panelInfo) panelInfo.tooltipCleanup = cleanupFn;
     }
 
+    _togglePriceLineLabels(panelId, showLabels) {
+      const panelInfo = this.panels.get(panelId);
+      if (!panelInfo) return;
+
+      const chartId = panelInfo.chartInstance;
+      if (!chartId || !this.chartInstances.has(chartId)) return;
+
+      const instance = this.chartInstances.get(chartId);
+      if (!instance.series || !instance.priceLines) return;
+
+      const data = Storage.load();
+
+      // 移除旧的价格线
+      if (instance.priceLines.highLine) {
+        instance.series.removePriceLine(instance.priceLines.highLine);
+      }
+      if (instance.priceLines.lowLine) {
+        instance.series.removePriceLine(instance.priceLines.lowLine);
+      }
+      if (instance.priceLines.positionLine) {
+        instance.series.removePriceLine(instance.priceLines.positionLine);
+      }
+
+      // 重新创建价格线（带或不带标签）
+      const modelArbitrage = (data.arbitrageData?.today || []).find(
+        (a) => a.model_name === panelInfo.modelName,
+      );
+      const modelPosition = data.positions?.[panelInfo.modelName];
+
+      if (modelArbitrage) {
+        const highLine = instance.series.createPriceLine({
+          price: modelArbitrage.high_24h,
+          color: "#00A854",
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: showLabels ? "今日最高" : "",
+        });
+        const lowLine = instance.series.createPriceLine({
+          price: modelArbitrage.low_24h,
+          color: "#F55454",
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: showLabels ? "今日最低" : "",
+        });
+        let positionLine = null;
+        if (modelPosition) {
+          positionLine = instance.series.createPriceLine({
+            price: modelPosition.avg_cost,
+            color: "#A0522D",
+            lineWidth: 1,
+            lineStyle: 2,
+            axisLabelVisible: true,
+            title: showLabels ? "持仓价" : "",
+          });
+        }
+        instance.priceLines = { highLine, lowLine, positionLine };
+      }
+    }
+
     async refreshChartData(panelId) {
       const panelInfo = this.panels.get(panelId);
       if (!panelInfo || panelInfo.isRefreshing) return false;
@@ -3096,16 +3170,29 @@
           }
         }
 
+        // 获取勾选框状态
+        const checkbox = panelInfo.element?.querySelector(`#${panelId}-show-labels`);
+        const showLabels = checkbox ? checkbox.checked : true;
+
         const { stats, priceLines } = this._updateChartSeriesData(
           instance.series,
           enrichedChartData,
           panelInfo.modelName,
           data,
+          showLabels,
         );
         instance.priceLines = priceLines;
 
         if (stats) {
           Chart.updateChartStatsDisplay(panelInfo.element, stats, panelId);
+          // 重新绑定勾选框事件
+          const newCheckbox = panelInfo.element?.querySelector(`#${panelId}-show-labels`);
+          if (newCheckbox) {
+            newCheckbox.checked = showLabels;
+            newCheckbox.addEventListener("change", () => {
+              this._togglePriceLineLabels(panelId, newCheckbox.checked);
+            });
+          }
         }
 
         if (enrichedChartData.length > 1) {
