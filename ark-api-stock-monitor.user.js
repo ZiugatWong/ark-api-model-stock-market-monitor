@@ -303,7 +303,7 @@
       // 输出: { "gpt-4": [["1718380800", 99.5]] }
       const converted = {};
       for (const [model, records] of Object.entries(serviceData)) {
-        converted[model] = records.map((r) => [String(r.timestamp), r.price]);
+        converted[model] = records.map((r) => [Number(r.timestamp), r.price]);
       }
       return converted;
     },
@@ -322,7 +322,7 @@
 
         // 获取新数据的时间范围
         const newTimestamps = newRecords.map((r) =>
-          parseInt(r[0]),
+          r[0],
         );
         const minTs = Math.min(...newTimestamps);
         const maxTs = Math.max(...newTimestamps);
@@ -332,7 +332,7 @@
 
         // 删除时间范围内的现有数据
         const filtered = existing.filter((record) => {
-          const ts = parseInt(record[0]);
+          const ts = record[0];
           return ts < minTs || ts > maxTs;
         });
 
@@ -583,7 +583,7 @@
         if (!modelSet.has(stock.model_name)) continue;
 
         const price = parseFloat(stock.current_price.toFixed(2));
-        const ts = String(stock.last_update);
+        const ts = Number(stock.last_update);
 
         if (!data.priceData[stock.model_name]) {
           data.priceData[stock.model_name] = [];
@@ -667,7 +667,7 @@
 
         for (const modelName of Object.keys(data.priceData)) {
           data.priceData[modelName] = data.priceData[modelName].filter((item) => {
-            const ts = Number(item[0]);
+            const ts = item[0];
             return ts >= cutoffTime;
           });
         }
@@ -2404,7 +2404,7 @@
       return rawData
         .map((item) => {
           if (!item || item[0] === undefined || item[1] === undefined) return null;
-          return { time: Number(item[0]), value: parseFloat(item[1]) };
+          return { time: item[0], value: parseFloat(item[1]) };
         })
         .filter(Boolean)
         .sort((a, b) => a.time - b.time);
@@ -4532,7 +4532,7 @@
       }
 
       const timestampsAsc = [...tsSet]
-        .sort((a, b) => Number(a) - Number(b))
+        .sort((a, b) => a - b)
         .slice(-CONFIG.TABLE_DISPLAY_LIMIT);
 
       if (timestampsAsc.length === 0) {
@@ -4733,7 +4733,7 @@
         const timeCell = document.createElement("td");
         timeCell.className = "time-cell";
         timeCell.textContent = TimeUtils.formatSecondsTimestamp(
-          Number(ts),
+          ts,
           "short",
         );
         row.appendChild(timeCell);
@@ -4840,7 +4840,7 @@
       }
 
       const uniqueTimestamps = [...new Set(allTimestamps)].sort(
-        (a, b) => Number(a) - Number(b),
+        (a, b) => a - b,
       );
       const fullIndex = uniqueTimestamps.indexOf(currentTs);
       if (fullIndex > 0) {
