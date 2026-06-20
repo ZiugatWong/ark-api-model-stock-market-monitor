@@ -300,12 +300,10 @@
     // 转换 stock-data-service 返回的数据格式
     convertPriceDataFormat(serviceData) {
       // 输入: { "gpt-4": [{timestamp: 1718380800, price: 99.5}] }
-      // 输出: { "gpt-4": [{"1718380800": 99.5}] }
+      // 输出: { "gpt-4": [["1718380800", 99.5]] }
       const converted = {};
       for (const [model, records] of Object.entries(serviceData)) {
-        converted[model] = records.map((r) => ({
-          [String(r.timestamp)]: r.price,
-        }));
+        converted[model] = records.map((r) => [String(r.timestamp), r.price]);
       }
       return converted;
     },
@@ -324,7 +322,7 @@
 
         // 获取新数据的时间范围
         const newTimestamps = newRecords.map((r) =>
-          parseInt(Object.keys(r)[0]),
+          parseInt(r[0]),
         );
         const minTs = Math.min(...newTimestamps);
         const maxTs = Math.max(...newTimestamps);
@@ -334,7 +332,7 @@
 
         // 删除时间范围内的现有数据
         const filtered = existing.filter((record) => {
-          const ts = parseInt(Object.keys(record)[0]);
+          const ts = parseInt(record[0]);
           return ts < minTs || ts > maxTs;
         });
 
@@ -344,11 +342,7 @@
         merged[model] = [...filtered, ...newRecords];
 
         // 按时间戳排序
-        merged[model].sort((a, b) => {
-          const tsA = parseInt(Object.keys(a)[0]);
-          const tsB = parseInt(Object.keys(b)[0]);
-          return tsA - tsB;
-        });
+        merged[model].sort((a, b) => a[0] - b[0]);
 
         totalAdded += newRecords.length;
       }
@@ -596,9 +590,9 @@
         }
 
         const list = data.data[stock.model_name];
-        const exists = list.some((item) => Object.keys(item)[0] === ts);
+        const exists = list.some((item) => item[0] === ts);
         if (!exists) {
-          list.push({ [ts]: price });
+          list.push([ts, price]);
         } else {
           if (!deduplicatedModels.includes(stock.model_name)) {
             deduplicatedModels.push(stock.model_name);
@@ -673,7 +667,7 @@
 
         for (const modelName of Object.keys(data.data)) {
           data.data[modelName] = data.data[modelName].filter((item) => {
-            const ts = Number(Object.keys(item)[0]);
+            const ts = Number(item[0]);
             return ts >= cutoffTime;
           });
         }
@@ -772,10 +766,10 @@
 
         const latest = modelData[modelData.length - 1];
         const previous = modelData[modelData.length - 2];
-        const latestTs = Object.keys(latest)[0];
-        const previousTs = Object.keys(previous)[0];
-        const latestPrice = latest[latestTs];
-        const previousPrice = previous[previousTs];
+        const latestTs = latest[0];
+        const previousTs = previous[0];
+        const latestPrice = latest[1];
+        const previousPrice = previous[1];
 
         if (config.upperLimit !== null && config.upperLimit !== undefined) {
           if (
@@ -2409,10 +2403,8 @@
       if (!Array.isArray(rawData)) return [];
       return rawData
         .map((item) => {
-          const timestamp = Object.keys(item)[0];
-          const price = item[timestamp];
-          if (!timestamp || price === undefined) return null;
-          return { time: Number(timestamp), value: parseFloat(price) };
+          if (!item || item[0] === undefined || item[1] === undefined) return null;
+          return { time: Number(item[0]), value: parseFloat(item[1]) };
         })
         .filter(Boolean)
         .sort((a, b) => a.time - b.time);
@@ -4535,7 +4527,7 @@
       for (const m of models) {
         const list = allData[m] || [];
         for (const item of list) {
-          tsSet.add(Object.keys(item)[0]);
+          tsSet.add(item[0]);
         }
       }
 
@@ -4555,8 +4547,7 @@
         priceMap[m] = {};
         const list = allData[m] || [];
         for (const item of list) {
-          const ts = Object.keys(item)[0];
-          priceMap[m][ts] = item[ts];
+          priceMap[m][item[0]] = item[1];
         }
       }
 
@@ -4844,7 +4835,7 @@
       for (const model in allData) {
         const list = allData[model] || [];
         for (const item of list) {
-          allTimestamps.push(Object.keys(item)[0]);
+          allTimestamps.push(item[0]);
         }
       }
 
