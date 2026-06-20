@@ -4515,7 +4515,7 @@
       if (models.length === 0) {
         wrap.innerHTML =
           '<div class="ark-empty-hint">暂无数据，请添加模型后获取</div>';
-        // 重置面板宽度为最小宽度
+        this._priceTableState = null;
         const pricePanel = document.querySelector("#ark-price-panel");
         if (pricePanel) {
           pricePanel.style.width = "400px";
@@ -4526,8 +4526,8 @@
       // 根据模型数量动态设置面板宽度
       const pricePanel = document.querySelector("#ark-price-panel");
       if (pricePanel) {
-        const calculatedWidth = 80 * models.length + 150; // 50px per model + 150px for time column and padding
-        const finalWidth = Math.max(400, calculatedWidth); // 确保不小于最小宽度
+        const calculatedWidth = 80 * models.length + 150;
+        const finalWidth = Math.max(400, calculatedWidth);
         pricePanel.style.width = finalWidth + "px";
       }
 
@@ -4546,6 +4546,7 @@
       if (timestampsAsc.length === 0) {
         wrap.innerHTML =
           '<div class="ark-empty-hint">暂无数据，请获取价格</div>';
+        this._priceTableState = null;
         return;
       }
 
@@ -4594,60 +4595,240 @@
       const positions = data.positions || {};
       const modelColors = data.modelColors || {};
 
-      let html =
-        '<table class="ark-price-table"><thead><tr><th class="time-cell">时间</th>';
-      for (const m of models) {
-        const pos = positions[m];
-        let displayName = Utils.escapeHtml(m);
-        let linkStyle = "";
+      const prevState = this._priceTableState;
+      const sameStructure =
+        prevState &&
+        prevState.wrap === wrap &&
+        this._arraysEqual(prevState.models, models) &&
+        this._arraysEqual(prevState.timestamps, timestampsDesc);
 
+      if (sameStructure) {
+        // Header-only fields may have changed (color, positions); patch headers first
+        if (
+          !this._shallowEqual(prevState.modelColors, modelColors) ||
+          !this._shallowEqual(prevState.positions, positions)
+        ) {
+          this._patchPriceHeader(wrap, models, positions, modelColors, now);
+          prevState.modelColors = { ...modelColors };
+          prevState.positions = { ...positions };
+        }
+        this._patchPriceCells(
+          wrap,
+          models,
+          timestampsDesc,
+          priceMap,
+          bgColorMap,
+        );
+        return;
+      }
+
+      // Full rebuild with DOM API
+      this._buildPriceTableDOM(
+        wrap,
+        models,
+        timestampsDesc,
+        priceMap,
+        bgColorMap,
+        positions,
+        modelColors,
+        now,
+      );
+
+      this._priceTableState = {
+        wrap,
+        models: [...models],
+        timestamps: [...timestampsDesc],
+        modelColors: { ...modelColors },
+        positions: { ...positions },
+      };
+    },
+
+    _arraysEqual(a, b) {
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+      }
+      return true;
+    },
+
+    _shallowEqual(a, b) {
+      if (a === b) return true;
+      if (!a || !b) return a === b;
+      const keysA = Object.keys(a);
+      const keysB = Object.keys(b);
+      if (keysA.length !== keysB.length) return false;
+      for (const k of keysA) {
+        if (a[k] !== b[k]) return false;
+      }
+      return true;
+    },
+
+    _ensurePriceTableDelegation(wrap) {
+      if (wrap._priceDelegationDone) return;
+      wrap._priceDelegationDone = true;
+
+      wrap.addEventListener("click", (e) => {
+        const link = e.target.closest(".model-chart-link");
+        if (!link) return;
+        e.preventDefault();
+        const modelName = link.getAttribute("data-model");
+        ChartManager.showChartPanel(modelName).catch((error) => {
+          console.error("[Ark Stock Monitor] 打开分时走势图失败:", error);
+        });
+      });
+
+      wrap.addEventListener("contextmenu", (e) => {
+        const link = e.target.closest(".model-chart-link");
+        if (!link) return;
+        e.preventDefault();
+        const modelName = link.getAttribute("data-model");
+        UIRenderers.showColorMenu(e, modelName, Storage.load());
+      });
+    },
+
+    _buildPriceTableDOM(
+      wrap,
+      models,
+      timestampsDesc,
+      priceMap,
+      bgColorMap,
+      positions,
+      modelColors,
+      now,
+    ) {
+      this._ensurePriceTableDelegation(wrap);
+
+      const table = document.createElement("table");
+      table.className = "ark-price-table";
+
+      // Build header
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      const timeTh = document.createElement("th");
+      timeTh.className = "time-cell";
+      timeTh.textContent = "时间";
+      headerRow.appendChild(timeTh);
+
+      for (const m of models) {
+        const th = document.createElement("th");
+        const link = document.createElement("a");
+        link.className = "model-chart-link";
+        link.href = "javascript:void(0)";
+        link.setAttribute("data-model", m);
+
+        let displayName = m;
+
+        const pos = positions[m];
         if (pos) {
           if (pos.locked_until > now) {
             displayName = "🔒 " + displayName;
           }
-          linkStyle = ' style="color:#a855f7"';
+          link.style.color = "#a855f7";
         } else if (modelColors[m]) {
-          linkStyle = ` style="color:${modelColors[m]}"`;
+          link.style.color = modelColors[m];
         }
 
-        html += `<th><a href="javascript:void(0)" class="model-chart-link" data-model="${Utils.escapeHtml(m)}"${linkStyle}>${displayName}</a></th>`;
+        link.textContent = displayName;
+        th.appendChild(link);
+        headerRow.appendChild(th);
       }
-      html += "</tr></thead><tbody>";
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
 
+      // Build body
+      const tbody = document.createElement("tbody");
       for (const ts of timestampsDesc) {
-        const timeStr = TimeUtils.formatSecondsTimestamp(Number(ts), "short");
-        html += `<tr><td class="time-cell">${timeStr}</td>`;
+        const row = document.createElement("tr");
+        const timeCell = document.createElement("td");
+        timeCell.className = "time-cell";
+        timeCell.textContent = TimeUtils.formatSecondsTimestamp(
+          Number(ts),
+          "short",
+        );
+        row.appendChild(timeCell);
+
         for (const m of models) {
+          const td = document.createElement("td");
           const price = priceMap[m][ts];
-          const cellContent = price !== undefined ? price.toFixed(2) : "-";
-          const cssClass = bgColorMap[ts][m] || "price-neutral";
-          html += `<td class="${cssClass}">${cellContent}</td>`;
+          td.textContent = price !== undefined ? price.toFixed(2) : "-";
+          td.className = bgColorMap[ts][m] || "price-neutral";
+          row.appendChild(td);
         }
-        html += "</tr>";
+        tbody.appendChild(row);
       }
-      html += "</tbody></table>";
+      table.appendChild(tbody);
 
-      wrap.innerHTML = html;
+      wrap.innerHTML = "";
+      wrap.appendChild(table);
+    },
 
-      setTimeout(() => {
-        const modelLinks = document.querySelectorAll(".model-chart-link");
-        modelLinks.forEach((link) => {
-          link.addEventListener("click", (e) => {
-            e.preventDefault();
-            const modelName = link.getAttribute("data-model");
-            ChartManager.showChartPanel(modelName).catch((error) => {
-              console.error("[Ark Stock Monitor] 打开分时走势图失败:", error);
-            });
-          });
+    _patchPriceHeader(wrap, models, positions, modelColors, now) {
+      const headerCells = wrap.querySelectorAll("thead tr th");
+      // headerCells[0] is the time column header, skip it
+      for (let i = 0; i < models.length; i++) {
+        const th = headerCells[i + 1];
+        if (!th) break;
 
-          // 添加右键事件监听
-          link.addEventListener("contextmenu", (e) => {
-            e.preventDefault();
-            const modelName = link.getAttribute("data-model");
-            UIRenderers.showColorMenu(e, modelName, data);
-          });
-        });
-      }, 100);
+        const m = models[i];
+        const link = th.querySelector(".model-chart-link");
+        if (!link) continue;
+
+        const pos = positions[m];
+        if (pos) {
+          link.style.color = "#a855f7";
+          const lockPrefix = "🔒 ";
+          const baseName = link.textContent.startsWith(lockPrefix)
+            ? link.textContent.slice(lockPrefix.length)
+            : link.textContent;
+          link.textContent =
+            pos.locked_until > now ? lockPrefix + baseName : baseName;
+        } else if (modelColors[m]) {
+          link.style.color = modelColors[m];
+          // Remove lock prefix if no longer locked
+          if (link.textContent.startsWith("🔒 ")) {
+            link.textContent = link.textContent.slice(3);
+          }
+        } else {
+          link.style.color = "";
+          if (link.textContent.startsWith("🔒 ")) {
+            link.textContent = link.textContent.slice(3);
+          }
+        }
+      }
+    },
+
+    _patchPriceCells(
+      wrap,
+      models,
+      timestampsDesc,
+      priceMap,
+      bgColorMap,
+    ) {
+      const rows = wrap.querySelectorAll("tbody tr");
+      for (let i = 0; i < timestampsDesc.length; i++) {
+        const ts = timestampsDesc[i];
+        const row = rows[i];
+        if (!row) break;
+
+        const cells = row.querySelectorAll("td");
+        // cells[0] 是时间列，同一时间戳内容不变，跳过
+        for (let j = 1; j < cells.length; j++) {
+          const m = models[j - 1];
+          if (!m) break;
+
+          const price = priceMap[m]?.[ts];
+          const newContent = price !== undefined ? price.toFixed(2) : "-";
+          const newClass = bgColorMap[ts]?.[m] || "price-neutral";
+
+          const td = cells[j];
+          if (td.textContent !== newContent) {
+            td.textContent = newContent;
+          }
+          if (td.className !== newClass) {
+            td.className = newClass;
+          }
+        }
+      }
     },
 
     _findPreviousPriceTimestamp(currentTs, timestampsAsc, allData, priceMap) {
