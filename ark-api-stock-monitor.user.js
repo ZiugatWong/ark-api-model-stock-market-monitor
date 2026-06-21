@@ -2,7 +2,7 @@
 // @name         Ark API 模型股市监控
 // @description  Ark API 模型股市数据聚合分析与价格变动通知
 // @namespace    http://tampermonkey.net/
-// @version      1.0.2
+// @version      1.0.3
 // @author       ziugat
 // @license      GPL-3.0
 // @homepage     https://github.com/ZiugatWong/ark-api-model-stock-market-monitor
@@ -1129,7 +1129,7 @@
       box-shadow: 0 8px 32px rgba(0,0,0,0.5);
       display: none;
       flex-direction: column;
-      overflow: visible;
+      overflow: hidden;
     }
     #ark-stock-panel.visible { display: flex; }
     /* ===== 通用面板标题栏 ===== */
@@ -1237,7 +1237,7 @@
     .ark-panel-header .info-btn-wrap:hover .info-tooltip { display: block; }
     #ark-stock-panel .panel-body {
       padding: 8px 14px;
-      overflow-y: visible;
+      overflow-y: auto;
       flex: 1;
       background: #1a1a1a;
       border-radius: 0 0 10px 10px;
