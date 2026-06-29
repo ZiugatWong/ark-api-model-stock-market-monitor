@@ -2,7 +2,7 @@
 // @name         Ark API 模型股市监控
 // @description  Ark API 模型股市数据聚合分析与价格变动通知
 // @namespace    http://tampermonkey.net/
-// @version      1.0.3
+// @version      1.0.4
 // @author       ziugat
 // @license      GPL-3.0
 // @homepage     https://github.com/ZiugatWong/ark-api-model-stock-market-monitor
