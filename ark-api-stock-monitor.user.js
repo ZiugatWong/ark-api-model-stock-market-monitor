@@ -49,6 +49,8 @@
       enableTelegram: false,
       telegramBotToken: null,
       telegramChatId: null,
+      enableBark: false,
+      barkUrl: null,
     },
     notifications: {},
     priceData: {},
@@ -95,6 +97,8 @@
             enableTelegram: false,
             telegramBotToken: null,
             telegramChatId: null,
+            enableBark: false,
+            barkUrl: null,
           },
           notifications: d.notifications || {},
           tradeHistory: d.tradeHistory || {},
@@ -968,11 +972,61 @@
       });
     },
 
+    sendBark(triggered) {
+      const settings = Storage.load().notificationSettings;
+      const barkUrl = settings.barkUrl;
+
+      if (!barkUrl) {
+        console.warn("[Ark Stock Monitor] Bark 未配置");
+        return;
+      }
+
+      const count = triggered.length;
+      let title = `🔔 价格突破提醒`;
+      let body = `${count}个模型触发通知\n`;
+
+      triggered.forEach((item, index) => {
+        const label = item.type === "upper" ? "突破上限" : "突破下限";
+        body += `\n${index + 1}. ${item.model}\n`;
+        body += `   价格: ${item.price.toFixed(2)} | ${label}: ${item.limit}`;
+      });
+
+      body += `\n\n时间: ${TimeUtils.formatDateTime(Date.now())}`;
+
+      // Bark URL 格式: https://api.day.app/YOUR_KEY/title/body?params
+      // 或者用 POST 方式
+      const urlEncoded = `${barkUrl}/${encodeURIComponent(title)}/${encodeURIComponent(body)}?group=股市监控&sound=alarm&level=timeSensitive`;
+
+      GM_xmlhttpRequest({
+        method: "GET",
+        url: urlEncoded,
+        onload(response) {
+          try {
+            const result = JSON.parse(response.responseText);
+            if (result.code === 200) {
+              console.log("[Ark Stock Monitor] Bark 批量通知发送成功");
+            } else {
+              console.error(
+                "[Ark Stock Monitor] Bark 批量通知发送失败:",
+                result.message,
+              );
+            }
+          } catch (e) {
+            console.error("[Ark Stock Monitor] 解析 Bark 响应失败:", e);
+          }
+        },
+        onerror(error) {
+          console.error("[Ark Stock Monitor] Bark 请求失败:", error);
+        },
+      });
+    },
+
     sendBatch(triggered) {
       const settings = Storage.load().notificationSettings;
       if (settings.enablePopup) this.showPopup(triggered);
       if (settings.enableSound) this.playSound();
       if (settings.enableTelegram) this.sendTelegram(triggered);
+      if (settings.enableBark) this.sendBark(triggered);
     },
 
     sendTest() {
@@ -981,6 +1035,7 @@
         settings.enablePopup,
         settings.enableSound,
         settings.enableTelegram,
+        settings.enableBark,
       ].filter(Boolean).length;
       if (enabledCount === 0) {
         alert("没有启用任何通知方式，请在设置中开启至少一种通知方式");
@@ -3783,6 +3838,22 @@
                 <input type="text" class="ark-minute-input" id="ark-telegram-chatid" placeholder="请输入 Chat ID" style="width: 320px;" />
               </div>
             </div>
+            <div class="ark-trigger-row">
+              <span style="color:var(--ark-label);font-size:12px;">开启 Bark 提醒：</span>
+              <label class="ark-toggle">
+                <input type="checkbox" id="ark-notif-bark-toggle" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div id="ark-bark-config" style="display:none; margin-top: 10px;">
+              <div class="ark-trigger-row">
+                <span style="color:var(--ark-label);font-size:12px;width:80px;">Bark URL：</span>
+                <input type="text" class="ark-minute-input" id="ark-bark-url" placeholder="https://api.day.app/YOUR_KEY" style="width: 320px;" />
+              </div>
+              <div style="font-size:10px;color:var(--ark-muted);margin-top:4px;margin-left:80px;">
+                从 Bark App 复制完整推送地址
+              </div>
+            </div>
             <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ark-border-2);">
               <div class="ark-section-label" style="font-size: 11px; color: var(--ark-muted); border-bottom: none; margin-bottom: 6px;">添加模型价格突破提醒</div>
               <div class="ark-trigger-row">
@@ -3876,6 +3947,15 @@
       const telegramChatIdInput = this._settingsPanel.querySelector(
         "#ark-telegram-chatid",
       );
+      const notifBarkToggle = this._settingsPanel.querySelector(
+        "#ark-notif-bark-toggle",
+      );
+      const barkConfig = this._settingsPanel.querySelector(
+        "#ark-bark-config",
+      );
+      const barkUrlInput = this._settingsPanel.querySelector(
+        "#ark-bark-url",
+      );
       const notifModelSelect = this._settingsPanel.querySelector(
         "#ark-notif-model-select",
       );
@@ -3898,6 +3978,9 @@
       telegramTokenInput.value = settings.telegramBotToken || "";
       telegramChatIdInput.value = settings.telegramChatId || "";
       telegramConfig.style.display = settings.enableTelegram ? "block" : "none";
+      notifBarkToggle.checked = settings.enableBark;
+      barkUrlInput.value = settings.barkUrl || "";
+      barkConfig.style.display = settings.enableBark ? "block" : "none";
 
       notifPopupToggle.addEventListener("change", () => {
         const d = Storage.load();
@@ -3931,6 +4014,22 @@
         const d = Storage.load();
         d.notificationSettings.telegramChatId =
           telegramChatIdInput.value.trim() || null;
+        Storage.save(d);
+      });
+
+      notifBarkToggle.addEventListener("change", () => {
+        const d = Storage.load();
+        d.notificationSettings.enableBark = notifBarkToggle.checked;
+        Storage.save(d);
+        barkConfig.style.display = notifBarkToggle.checked
+          ? "block"
+          : "none";
+      });
+
+      barkUrlInput.addEventListener("change", () => {
+        const d = Storage.load();
+        d.notificationSettings.barkUrl =
+          barkUrlInput.value.trim() || null;
         Storage.save(d);
       });
 
