@@ -392,13 +392,18 @@
       }
     },
 
-    // 转换 stock-data-service 返回的数据格式
+    // 转换 stock-data-service 返回的数据格式（主键为 stockId）
     convertPriceDataFormat(serviceData) {
-      // 输入: { "gpt-4": [{timestamp: 1718380800, price: 99.5}] }
-      // 输出: { "gpt-4": [["1718380800", 99.5]] }
+      // 输入: { 1: [{timestamp: 1718380800, price: 99.5}] }（key 为整数 stockId）
+      // 输出: { "1": [["1718380800", 99.5]] }（key 归一化为整数字符串）
       const converted = {};
-      for (const [model, records] of Object.entries(serviceData)) {
-        converted[model] = records.map((r) => [Number(r.timestamp), r.price]);
+      for (const [stockId, records] of Object.entries(serviceData)) {
+        if (!records || records.length === 0) continue;
+        // key 归一化为整数字符串，与本地 priceData 的键保持一致
+        converted[Number(stockId)] = records.map((r) => [
+          Number(r.timestamp),
+          r.price,
+        ]);
       }
       return converted;
     },
@@ -4289,11 +4294,11 @@
         syncStatusEl.style.color = "var(--ark-accent)";
 
         try {
-          // 调用通用 API，传入价格批量接口的端点和参数
+          // 调用通用 API，传入价格批量接口的端点和参数（主键为 stockId）
           const serviceData = await API.syncBatchData(
             d.dataServiceUrl,
             "/api/prices/batch",
-            { models: d.models, days: 7 },
+            { stockIds: d.models, days: 7 },
           );
 
           syncStatusEl.textContent = "数据获取成功，正在处理...";
