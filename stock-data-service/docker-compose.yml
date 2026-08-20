@@ -10,7 +10,7 @@ services:
       - REDIS_URL=redis://ark-api-model-stock-redis:6379
       - ARK_GAME_COOKIE=${ARK_GAME_COOKIE}
       - ARK_GAME_BASE_URL=https://game.arkengine.me
-      - SYNC_CRON=1-59/5 * * * *
+      - SYNC_CRON=1/5 * * * *
       - RATE_LIMIT_WINDOW_SECONDS=60
       - RATE_LIMIT_MAX=2
       - PORT=3210

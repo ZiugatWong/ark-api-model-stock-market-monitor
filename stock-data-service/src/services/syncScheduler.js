@@ -1,4 +1,4 @@
-const cron = require("node-cron");
+const { CronJob } = require("cron");
 const redis = require("../config/redis");
 const arkGameApi = require("./arkGameApi");
 const notificationService = require("./notificationService");
@@ -22,7 +22,7 @@ const {
  */
 class SyncScheduler {
   constructor() {
-    this.task = null;
+    this.job = null;
   }
 
   /**
@@ -157,11 +157,6 @@ class SyncScheduler {
   async start() {
     const cronExpression = config.sync.cron;
 
-    // 验证Cron表达式
-    if (!cron.validate(cronExpression)) {
-      throw new Error(`无效的Cron表达式: ${cronExpression}`);
-    }
-
     // 服务启动时清理错误通知计数器
     try {
       await notificationService.resetFailureCount();
@@ -170,23 +165,26 @@ class SyncScheduler {
       logger.error("定时任务", "清理计数器失败:", error.message);
     }
 
-    // 启动定时任务
-    this.task = cron.schedule(cronExpression, () => {
+    // 启动定时任务（cron 库构造时即校验表达式，非法直接抛错）
+    // 注意：不立即 start()，改为「先手动调用一次再启动」避免重复执行
+    this.job = new CronJob(cronExpression, () => {
       this.syncPrices();
     });
 
     logger.log("定时任务", `已启动，Cron表达式: ${cronExpression}`);
 
     // 立即执行一次
-    this.syncPrices();
+    await this.syncPrices();
+
+    this.job.start();
   }
 
   /**
    * 停止定时任务
    */
   stop() {
-    if (this.task) {
-      this.task.stop();
+    if (this.job) {
+      this.job.stop();
       logger.log("定时任务", "已停止");
     }
   }
