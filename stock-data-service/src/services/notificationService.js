@@ -7,7 +7,7 @@ const { CACHE_TTL } = require('../constants/business');
 
 /**
  * 通知服务
- * 负责管理 WindHub API 调用失败的通知功能
+ * 负责管理 Ark Game API 调用失败的通知功能
  */
 class NotificationService {
   constructor() {
@@ -145,13 +145,13 @@ class NotificationService {
       hour12: false
     }).replace(/\//g, '-');
 
-    return `⚠️ WindHub API 连续失败告警
+    return `⚠️ Ark Game API 连续失败告警
 
 失败次数: ${errorDetails.count} 次
 最后失败时间: ${timestamp}
 失败原因: ${errorDetails.message}
 
-请检查 WINDHUB_COOKIE 是否过期。`;
+请检查 ARK_GAME_COOKIE 是否过期。`;
   }
 
   /**

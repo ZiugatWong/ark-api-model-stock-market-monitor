@@ -60,15 +60,14 @@ async function start() {
     logger.log("启动", "==========================================");
     logger.log("启动", `NODE_ENV: ${process.env.NODE_ENV}`);
     logger.log("启动", `REDIS_URL: ${process.env.REDIS_URL}`);
-    logger.log("启动", `WINDHUB_USER_ID: ${process.env.WINDHUB_USER_ID}`);
     logger.log(
       "启动",
-      `WINDHUB_COOKIE: ${process.env.WINDHUB_COOKIE ? process.env.WINDHUB_COOKIE.substring(0, 50) + "..." : "未设置"}`,
+      `ARK_GAME_COOKIE: ${process.env.ARK_GAME_COOKIE ? process.env.ARK_GAME_COOKIE.substring(0, 50) + "..." : "未设置"}`,
     );
-    logger.log("启动", `WINDHUB_BASE_URL: ${process.env.WINDHUB_BASE_URL}`);
-    logger.log("启动", `WINDHUB_API_TIMEOUT: ${process.env.WINDHUB_API_TIMEOUT}`);
-    logger.log("启动", `WINDHUB_API_RETRIES: ${process.env.WINDHUB_API_RETRIES}`);
-    logger.log("启动", `WINDHUB_API_RETRY_DELAY: ${process.env.WINDHUB_API_RETRY_DELAY}`);
+    logger.log("启动", `ARK_GAME_BASE_URL: ${process.env.ARK_GAME_BASE_URL}`);
+    logger.log("启动", `ARK_GAME_API_TIMEOUT: ${process.env.ARK_GAME_API_TIMEOUT}`);
+    logger.log("启动", `ARK_GAME_API_RETRIES: ${process.env.ARK_GAME_API_RETRIES}`);
+    logger.log("启动", `ARK_GAME_API_RETRY_DELAY: ${process.env.ARK_GAME_API_RETRY_DELAY}`);
     logger.log("启动", `SYNC_CRON: ${process.env.SYNC_CRON}`);
     logger.log(
       "启动",

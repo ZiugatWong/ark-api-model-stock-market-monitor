@@ -1,5 +1,4 @@
 const express = require('express');
-const redis = require('../config/redis');
 const priceStorage = require('../services/priceStorage');
 const syncScheduler = require('../services/syncScheduler');
 const { sendSuccess, sendError, asyncHandler } = require('../utils/responseHelper');
@@ -10,34 +9,40 @@ const router = express.Router();
 
 /**
  * POST /api/prices/batch
- * 批量查询多个模型的价格数据
+ * 批量查询多个模型的价格数据（主键 stockId）
  */
 router.post('/prices/batch', asyncHandler('/api/prices/batch', async (req, res) => {
-  const { models, days } = req.body;
+  const { stockIds, days } = req.body;
 
   // 参数验证
-  if (!models || !Array.isArray(models) || models.length === 0) {
-    return sendError(res, '参数错误: models必须是非空数组', 400);
+  if (!stockIds || !Array.isArray(stockIds) || stockIds.length === 0) {
+    return sendError(res, '参数错误: stockIds 必须是非空数组', 400);
+  }
+
+  // 兼容字符串数字：服务端统一转为整数
+  const normalizedIds = stockIds.map(id => Number(id));
+  if (!normalizedIds.every(id => Number.isInteger(id))) {
+    return sendError(res, '参数错误: stockIds 必须全部为整数', 400);
   }
 
   const queryDays = days && Number.isInteger(days) && days > 0 ? days : DATA_RETENTION_DAYS;
 
   // 查询数据
-  const data = await priceStorage.getBatchPrices(models, queryDays);
+  const data = await priceStorage.getBatchPrices(normalizedIds, queryDays);
 
   sendSuccess(res, data);
 }));
 
 /**
- * GET /api/models
- * 获取所有可用模型列表
+ * GET /api/stock-ids
+ * 获取所有可用 stockId 列表
  */
-router.get('/models', asyncHandler('/api/models', async (req, res) => {
-  const models = await priceStorage.getAllModels();
+router.get('/stock-ids', asyncHandler('/api/stock-ids', async (req, res) => {
+  const stockIds = await priceStorage.getAllStockIds();
 
   sendSuccess(res, {
-    models,
-    count: models.length
+    stockIds,
+    count: stockIds.length
   });
 }));
 
