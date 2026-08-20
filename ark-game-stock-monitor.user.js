@@ -38,7 +38,7 @@
 
   const DEFAULT_DATA = {
     // 监控的 stockId 数组
-    models: [],
+    stockIds: [],
     autoTriggerMinuteEnds: "3,8",
     autoTrigger: false,
     lastUpdateTime: null,
@@ -93,7 +93,7 @@
       try {
         const d = typeof raw === "string" ? JSON.parse(raw) : raw;
         this._cache = {
-          models: d.models || [],
+          stockIds: d.stockIds || [],
           autoTriggerMinuteEnds: d.autoTriggerMinuteEnds || "3,8",
           autoTrigger: !!d.autoTrigger,
           priceData: d.priceData || {},
@@ -195,9 +195,9 @@
           const nameToId = {};
           for (const s of resp.stocks) nameToId[s.modelName] = s.id;
 
-          // 重建 models（旧存 modelName 数组 → stockId 数组）
+          // 重建 stockIds（旧存 modelName 数组 → stockId 数组）
           if (Array.isArray(oldData.models)) {
-            newData.models = oldData.models
+            newData.stockIds = oldData.models
               .map((name) => nameToId[name])
               .filter((id) => id !== undefined);
           }
@@ -417,7 +417,7 @@
       let totalAdded = 0;
       let totalRemoved = 0;
 
-      for (const [model, newRecords] of Object.entries(newData)) {
+      for (const [stockId, newRecords] of Object.entries(newData)) {
         if (!newRecords || newRecords.length === 0) continue;
 
         // 获取新数据的时间范围
@@ -426,7 +426,7 @@
         const maxTs = Math.max(...newTimestamps);
 
         // 获取现有数据
-        const existing = merged[model] || [];
+        const existing = merged[stockId] || [];
 
         // 删除时间范围内的现有数据
         const filtered = existing.filter((record) => {
@@ -437,10 +437,10 @@
         totalRemoved += existing.length - filtered.length;
 
         // 合并新数据
-        merged[model] = [...filtered, ...newRecords];
+        merged[stockId] = [...filtered, ...newRecords];
 
         // 按时间戳排序
-        merged[model].sort((a, b) => a[0] - b[0]);
+        merged[stockId].sort((a, b) => a[0] - b[0]);
 
         totalAdded += newRecords.length;
       }
@@ -576,13 +576,13 @@
   const DataProcessor = {
     processMarketData(response) {
       if (!response || !Array.isArray(response.stocks)) {
-        return { data: null, deduplicatedModels: [] };
+        return { data: null, deduplicatedStockIds: [] };
       }
 
       const data = Storage.load();
       const stocks = response.stocks;
-      const modelSet = new Set(data.models); // models 现在是 stockId 数组
-      const deduplicatedModels = []; // 收集"无新数据点"的 stockId
+      const monitoredIdSet = new Set(data.stockIds); // stockIds 即用户监控的 stockId 数组
+      const deduplicatedStockIds = []; // 收集"无新数据点"的 stockId
 
       // 缓存市场状态与规则
       data.marketRules = { enabled: response.enabled, rules: response.rules };
@@ -641,7 +641,7 @@
       }
 
       for (const s of activeStocks) {
-        if (!modelSet.has(s.id)) continue; // 仅处理用户监控的 stockId
+        if (!monitoredIdSet.has(s.id)) continue; // 仅处理用户监控的 stockId
         const price = parseFloat((s.priceCents / 100).toFixed(2));
         const ts = tickByStockId[s.id];
         if (ts === undefined) continue; // 无对应 tick，跳过
@@ -649,7 +649,7 @@
         if (!data.priceData[s.id]) data.priceData[s.id] = [];
         const list = data.priceData[s.id];
         if (list.length && list[list.length - 1][0] === ts) {
-          deduplicatedModels.push(s.id); // 同时间戳已存在
+          deduplicatedStockIds.push(s.id); // 同时间戳已存在
         } else {
           list.push([ts, price]);
         }
@@ -731,7 +731,7 @@
       }
 
       Storage.save(data);
-      return { data, deduplicatedModels };
+      return { data, deduplicatedStockIds };
     },
 
     processArbitrageData(response) {
@@ -762,8 +762,8 @@
       return list;
     },
 
-    // deduplicatedModels 现在是 stockId 数组
-    checkNotifications(deduplicatedModels) {
+    // deduplicatedStockIds 即 stockId 数组
+    checkNotifications(deduplicatedStockIds) {
       const data = Storage.load();
       const notifications = data.notifications;
       const settings = data.notificationSettings;
@@ -781,11 +781,11 @@
       if (notificationKeys.length === 0) return;
 
       const triggered = [];
-      const savedModels = new Set(data.models);
+      const monitoredIds = new Set(data.stockIds);
 
       for (const stockId of notificationKeys) {
-        if (!savedModels.has(stockId)) continue;
-        if (deduplicatedModels.includes(stockId)) continue;
+        if (!monitoredIds.has(stockId)) continue;
+        if (deduplicatedStockIds.includes(stockId)) continue;
 
         const config = notifications[stockId];
         const modelData = data.priceData[stockId];
@@ -2900,7 +2900,7 @@
       this.panels.set(panelId, {
         id: panelId,
         element: null,
-        modelName: stockId, // 字段名沿用，实际存 stockId
+        stockId: stockId, // 存 stockId
         chartInstance: null,
         tooltipCleanup: null,
         position: position,
@@ -3022,9 +3022,9 @@
       }
     }
 
-    findPanelByModel(modelName) {
+    findPanelByModel(stockId) {
       for (const [panelId, panelInfo] of this.panels) {
-        if (panelInfo.modelName === modelName) return panelId;
+        if (panelInfo.stockId === stockId) return panelId;
       }
       return null;
     }
@@ -3146,9 +3146,9 @@
 
       // 重新创建价格线（带或不带标签）
       const modelArbitrage = (data.arbitrageData || []).find(
-        (a) => a.stockId === panelInfo.modelName,
+        (a) => a.stockId === panelInfo.stockId,
       );
-      const modelPosition = data.positions?.[panelInfo.modelName];
+      const modelPosition = data.positions?.[panelInfo.stockId];
 
       if (modelArbitrage) {
         const highLine = instance.series.createPriceLine({
@@ -3192,10 +3192,10 @@
         this.showChartLoading(panelId, true);
 
         const data = Storage.load();
-        const modelData = data.priceData[panelInfo.modelName];
+        const modelData = data.priceData[panelInfo.stockId];
         if (!modelData || !Array.isArray(modelData)) {
           throw new Error(
-            `模型 "${Utils.getModelName(panelInfo.modelName)}" 暂无数据`,
+            `模型 "${Utils.getModelName(panelInfo.stockId)}" 暂无数据`,
           );
         }
 
@@ -3236,7 +3236,7 @@
         const { stats, priceLines } = this._updateChartSeriesData(
           instance.series,
           chartData,
-          panelInfo.modelName,
+          panelInfo.stockId,
           data,
           showLabels,
         );
@@ -3502,7 +3502,7 @@
 
       UIRenderers.renderMarketStatus(data);
 
-      UIRenderers.renderModelList(data.models);
+      UIRenderers.renderModelList(data.stockIds);
       this._setupModelSelector();
 
       return this._mainPanel;
@@ -3538,15 +3538,15 @@
       function addModels(stockIds) {
         if (!stockIds || !stockIds.length) return;
         const d = Storage.load();
-        const existingModels = new Set(d.models);
-        const newModels = stockIds.filter((id) => !existingModels.has(id));
-        if (newModels.length === 0) return;
-        d.models.push(...newModels);
-        newModels.forEach((id) => {
+        const existingIds = new Set(d.stockIds);
+        const newIds = stockIds.filter((id) => !existingIds.has(id));
+        if (newIds.length === 0) return;
+        d.stockIds.push(...newIds);
+        newIds.forEach((id) => {
           if (!d.priceData[id]) d.priceData[id] = [];
         });
         Storage.save(d);
-        UIRenderers.renderModelList(d.models);
+        UIRenderers.renderModelList(d.stockIds);
         UIRenderers.refreshPriceTable(d);
       }
 
@@ -3991,7 +3991,7 @@
       function populateNotifModelSelect() {
         const data = Storage.load();
         notifModelSelect.innerHTML = '<option value="">请选择模型</option>';
-        data.models.forEach((stockId) => {
+        data.stockIds.forEach((stockId) => {
           const option = document.createElement("option");
           option.value = stockId;
           option.textContent = Utils.getModelName(stockId);
@@ -4273,7 +4273,7 @@
           return;
         }
 
-        if (!d.models || d.models.length === 0) {
+        if (!d.stockIds || d.stockIds.length === 0) {
           alert("请先在主面板设置要监控的模型");
           return;
         }
@@ -4281,7 +4281,7 @@
         // 确认操作
         if (
           !confirm(
-            `将从服务获取 ${d.models.length} 个模型的7天价格数据并合并到本地，是否继续？`,
+            `将从服务获取 ${d.stockIds.length} 个模型的7天价格数据并合并到本地，是否继续？`,
           )
         ) {
           return;
@@ -4298,7 +4298,7 @@
           const serviceData = await API.syncBatchData(
             d.dataServiceUrl,
             "/api/prices/batch",
-            { stockIds: d.models, days: 7 },
+            { stockIds: d.stockIds, days: 7 },
           );
 
           syncStatusEl.textContent = "数据获取成功，正在处理...";
@@ -4592,12 +4592,12 @@
       `;
     },
 
-    renderModelList(models) {
+    renderModelList(stockIds) {
       const container = document.querySelector("#ark-model-list");
       if (!container) return;
       container.innerHTML = "";
       let dragSrcIdx = null;
-      models.forEach((stockId, idx) => {
+      stockIds.forEach((stockId, idx) => {
         const name = Utils.getModelName(stockId);
         const tag = document.createElement("span");
         tag.className = "ark-model-tag";
@@ -4606,9 +4606,9 @@
         tag.innerHTML = `${Utils.escapeHtml(name)}<button class="del-btn" data-stock-id="${Utils.escapeHtml(String(stockId))}" title="删除">&times;</button>`;
         tag.querySelector(".del-btn").addEventListener("click", () => {
           const d = Storage.load();
-          d.models = d.models.filter((m) => m !== stockId);
+          d.stockIds = d.stockIds.filter((m) => m !== stockId);
           Storage.save(d);
-          UIRenderers.renderModelList(d.models);
+          UIRenderers.renderModelList(d.stockIds);
           UIRenderers.refreshPriceTable(d);
         });
         tag.addEventListener("dragstart", (e) => {
@@ -4630,10 +4630,10 @@
           const dropIdx = parseInt(tag.dataset.idx);
           if (dragSrcIdx === null || dragSrcIdx === dropIdx) return;
           const d = Storage.load();
-          const [moved] = d.models.splice(dragSrcIdx, 1);
-          d.models.splice(dropIdx, 0, moved);
+          const [moved] = d.stockIds.splice(dragSrcIdx, 1);
+          d.stockIds.splice(dropIdx, 0, moved);
           Storage.save(d);
-          UIRenderers.renderModelList(d.models);
+          UIRenderers.renderModelList(d.stockIds);
           UIRenderers.refreshPriceTable(d);
         });
         tag.addEventListener("dragend", () => {
@@ -4651,10 +4651,10 @@
       const wrap = document.querySelector("#ark-price-table-wrap");
       if (!wrap) return;
 
-      const models = data.models || [];
+      const stockIds = data.stockIds || [];
       const allData = data.priceData || {};
 
-      if (models.length === 0) {
+      if (stockIds.length === 0) {
         wrap.innerHTML =
           '<div class="ark-empty-hint">暂无数据，请添加模型后获取</div>';
         this._priceTableState = null;
@@ -4668,14 +4668,14 @@
       // 根据模型数量动态设置面板宽度
       const pricePanel = document.querySelector("#ark-price-panel");
       if (pricePanel) {
-        const calculatedWidth = 80 * models.length + 150;
+        const calculatedWidth = 80 * stockIds.length + 150;
         const finalWidth = Math.max(400, calculatedWidth);
         pricePanel.style.width = finalWidth + "px";
       }
 
       const tsSet = new Set();
-      for (const m of models) {
-        const list = allData[m] || [];
+      for (const id of stockIds) {
+        const list = allData[id] || [];
         for (const item of list) {
           tsSet.add(item[0]);
         }
@@ -4693,11 +4693,11 @@
       }
 
       const priceMap = {};
-      for (const m of models) {
-        priceMap[m] = {};
-        const list = allData[m] || [];
+      for (const id of stockIds) {
+        priceMap[id] = {};
+        const list = allData[id] || [];
         for (const item of list) {
-          priceMap[m][item[0]] = item[1];
+          priceMap[id][item[0]] = item[1];
         }
       }
 
@@ -4705,9 +4705,9 @@
 
       for (const ts of timestampsAsc) {
         bgColorMap[ts] = {};
-        for (const m of models) {
+        for (const id of stockIds) {
           let cssClass = "price-neutral";
-          const currentPrice = priceMap[m][ts];
+          const currentPrice = priceMap[id][ts];
 
           if (currentPrice !== undefined) {
             const prevTs = UIRenderers._findPreviousPriceTimestamp(
@@ -4717,16 +4717,16 @@
               priceMap,
             );
             if (prevTs) {
-              const prevPrice = priceMap[m][prevTs];
+              const prevPrice = priceMap[id][prevTs];
               if (prevPrice !== undefined) {
                 if (currentPrice > prevPrice) cssClass = "price-up";
                 else if (currentPrice < prevPrice) cssClass = "price-down";
-                else cssClass = bgColorMap[prevTs]?.[m] || "price-neutral";
+                else cssClass = bgColorMap[prevTs]?.[id] || "price-neutral";
               }
             }
           }
 
-          bgColorMap[ts][m] = cssClass;
+          bgColorMap[ts][id] = cssClass;
         }
       }
 
@@ -4740,7 +4740,7 @@
       const sameStructure =
         prevState &&
         prevState.wrap === wrap &&
-        this._arraysEqual(prevState.models, models) &&
+        this._arraysEqual(prevState.stockIds, stockIds) &&
         this._arraysEqual(prevState.timestamps, timestampsDesc);
 
       if (sameStructure) {
@@ -4749,13 +4749,13 @@
           !this._shallowEqual(prevState.modelColors, modelColors) ||
           !this._shallowEqual(prevState.positions, positions)
         ) {
-          this._patchPriceHeader(wrap, models, positions, modelColors, now);
+          this._patchPriceHeader(wrap, stockIds, positions, modelColors, now);
           prevState.modelColors = { ...modelColors };
           prevState.positions = { ...positions };
         }
         this._patchPriceCells(
           wrap,
-          models,
+          stockIds,
           timestampsDesc,
           priceMap,
           bgColorMap,
@@ -4766,7 +4766,7 @@
       // Full rebuild with DOM API
       this._buildPriceTableDOM(
         wrap,
-        models,
+        stockIds,
         timestampsDesc,
         priceMap,
         bgColorMap,
@@ -4777,7 +4777,7 @@
 
       this._priceTableState = {
         wrap,
-        models: [...models],
+        stockIds: [...stockIds],
         timestamps: [...timestampsDesc],
         modelColors: { ...modelColors },
         positions: { ...positions },
@@ -4829,7 +4829,7 @@
 
     _buildPriceTableDOM(
       wrap,
-      models,
+      stockIds,
       timestampsDesc,
       priceMap,
       bgColorMap,
@@ -4850,23 +4850,23 @@
       timeTh.textContent = "时间";
       headerRow.appendChild(timeTh);
 
-      for (const m of models) {
+      for (const id of stockIds) {
         const th = document.createElement("th");
         const link = document.createElement("a");
         link.className = "model-chart-link";
         link.href = "javascript:void(0)";
-        link.setAttribute("data-stock-id", m);
+        link.setAttribute("data-stock-id", id);
 
-        let displayName = Utils.getModelName(m);
+        let displayName = Utils.getModelName(id);
 
-        const pos = positions[m];
+        const pos = positions[id];
         if (pos) {
           if (pos.locked_until > now) {
             displayName = "🔒 " + displayName;
           }
           link.style.color = "#a855f7";
-        } else if (modelColors[m]) {
-          link.style.color = modelColors[m];
+        } else if (modelColors[id]) {
+          link.style.color = modelColors[id];
         }
 
         link.textContent = displayName;
@@ -4885,11 +4885,11 @@
         timeCell.textContent = TimeUtils.formatSecondsTimestamp(ts, "short");
         row.appendChild(timeCell);
 
-        for (const m of models) {
+        for (const id of stockIds) {
           const td = document.createElement("td");
-          const price = priceMap[m][ts];
+          const price = priceMap[id][ts];
           td.textContent = price !== undefined ? price.toFixed(2) : "-";
-          td.className = bgColorMap[ts][m] || "price-neutral";
+          td.className = bgColorMap[ts][id] || "price-neutral";
           row.appendChild(td);
         }
         tbody.appendChild(row);
@@ -4900,18 +4900,18 @@
       wrap.appendChild(table);
     },
 
-    _patchPriceHeader(wrap, models, positions, modelColors, now) {
+    _patchPriceHeader(wrap, stockIds, positions, modelColors, now) {
       const headerCells = wrap.querySelectorAll("thead tr th");
       // headerCells[0] is the time column header, skip it
-      for (let i = 0; i < models.length; i++) {
+      for (let i = 0; i < stockIds.length; i++) {
         const th = headerCells[i + 1];
         if (!th) break;
 
-        const m = models[i];
+        const stockId = stockIds[i];
         const link = th.querySelector(".model-chart-link");
         if (!link) continue;
 
-        const pos = positions[m];
+        const pos = positions[stockId];
         if (pos) {
           link.style.color = "#a855f7";
           const lockPrefix = "🔒 ";
@@ -4920,8 +4920,8 @@
             : link.textContent;
           link.textContent =
             pos.locked_until > now ? lockPrefix + baseName : baseName;
-        } else if (modelColors[m]) {
-          link.style.color = modelColors[m];
+        } else if (modelColors[stockId]) {
+          link.style.color = modelColors[stockId];
           // Remove lock prefix if no longer locked
           if (link.textContent.startsWith("🔒 ")) {
             link.textContent = link.textContent.slice(3);
@@ -4935,7 +4935,7 @@
       }
     },
 
-    _patchPriceCells(wrap, models, timestampsDesc, priceMap, bgColorMap) {
+    _patchPriceCells(wrap, stockIds, timestampsDesc, priceMap, bgColorMap) {
       const rows = wrap.querySelectorAll("tbody tr");
       for (let i = 0; i < timestampsDesc.length; i++) {
         const ts = timestampsDesc[i];
@@ -4945,12 +4945,12 @@
         const cells = row.querySelectorAll("td");
         // cells[0] 是时间列，同一时间戳内容不变，跳过
         for (let j = 1; j < cells.length; j++) {
-          const m = models[j - 1];
-          if (!m) break;
+          const stockId = stockIds[j - 1];
+          if (!stockId) break;
 
-          const price = priceMap[m]?.[ts];
+          const price = priceMap[stockId]?.[ts];
           const newContent = price !== undefined ? price.toFixed(2) : "-";
-          const newClass = bgColorMap[ts]?.[m] || "price-neutral";
+          const newClass = bgColorMap[ts]?.[stockId] || "price-neutral";
 
           const td = cells[j];
           if (td.textContent !== newContent) {
@@ -4967,14 +4967,14 @@
       const currentIndex = timestampsAsc.indexOf(currentTs);
       for (let i = currentIndex - 1; i >= 0; i--) {
         const prevTs = timestampsAsc[i];
-        for (const model in priceMap) {
-          if (priceMap[model][prevTs] !== undefined) return prevTs;
+        for (const stockId in priceMap) {
+          if (priceMap[stockId][prevTs] !== undefined) return prevTs;
         }
       }
 
       const allTimestamps = [];
-      for (const model in allData) {
-        const list = allData[model] || [];
+      for (const stockId in allData) {
+        const list = allData[stockId] || [];
         for (const item of list) {
           allTimestamps.push(item[0]);
         }
@@ -4987,8 +4987,8 @@
       if (fullIndex > 0) {
         for (let i = fullIndex - 1; i >= 0; i--) {
           const prevTs = uniqueTimestamps[i];
-          for (const model in priceMap) {
-            if (priceMap[model][prevTs] !== undefined) return prevTs;
+          for (const stockId in priceMap) {
+            if (priceMap[stockId][prevTs] !== undefined) return prevTs;
           }
         }
       }
@@ -5146,9 +5146,9 @@
       tbody.innerHTML = "";
 
       const positions = data.positions || {};
-      const modelNames = Object.keys(positions);
+      const stockIds = Object.keys(positions);
 
-      if (modelNames.length === 0) {
+      if (stockIds.length === 0) {
         tbody.innerHTML =
           '<tr><td colspan="9" style="text-align:center">暂无持仓数据</td></tr>';
         return;
@@ -5162,8 +5162,8 @@
       const fmtSigned = (n, suffix = "") =>
         `${n > 0 ? "+" : ""}${n.toFixed(2)}${suffix}`;
 
-      for (const modelName of modelNames) {
-        const pos = positions[modelName];
+      for (const stockId of stockIds) {
+        const pos = positions[stockId];
         const isUnlocked = pos.locked_until < now;
         const unlockTimeColor = isUnlocked ? "#22c55e" : "#ef4444";
 
@@ -5218,9 +5218,9 @@
         (a, b) => b[sortBy] - a[sortBy],
       );
 
-      // Load current monitored models
+      // Load current monitored stockIds
       const d = Storage.load();
-      const monitoredModels = new Set(d.models);
+      const monitoredIds = new Set(d.stockIds);
 
       let html = `
         <table class="ark-arbitrage-table">
@@ -5239,7 +5239,7 @@
       `;
 
       sortedData.forEach((item, index) => {
-        const isMonitored = monitoredModels.has(item.stockId);
+        const isMonitored = monitoredIds.has(item.stockId);
         const buttonText = isMonitored ? "取消" : "添加";
         const buttonClass = isMonitored
           ? "ark-btn ark-btn-danger ark-btn-xs"
@@ -5269,13 +5269,13 @@
 
           if (action === "add") {
             // Add model to monitored list
-            if (!data.models.includes(stockId)) {
-              data.models.push(stockId);
+            if (!data.stockIds.includes(stockId)) {
+              data.stockIds.push(stockId);
               if (!data.priceData[stockId]) {
                 data.priceData[stockId] = [];
               }
               Storage.save(data);
-              UIRenderers.renderModelList(data.models);
+              UIRenderers.renderModelList(data.stockIds);
               UIRenderers.refreshPriceTable(data);
               // Re-render arbitrage table to update button state
               const dataToRender = data.arbitrageData || [];
@@ -5283,9 +5283,9 @@
             }
           } else if (action === "remove") {
             // Remove model from monitored list
-            data.models = data.models.filter((m) => m !== stockId);
+            data.stockIds = data.stockIds.filter((m) => m !== stockId);
             Storage.save(data);
-            UIRenderers.renderModelList(data.models);
+            UIRenderers.renderModelList(data.stockIds);
             UIRenderers.refreshPriceTable(data);
             // Re-render arbitrage table to update button state
             const dataToRender = data.arbitrageData || [];
@@ -5492,7 +5492,7 @@
         Storage.save(currentData);
 
         const resp = await API.fetchMarketData();
-        const { data: processedData, deduplicatedModels } =
+        const { data: processedData, deduplicatedStockIds } =
           DataProcessor.processMarketData(resp);
 
         // 拉取代币余额（失败静默，不影响主流程）
@@ -5518,7 +5518,7 @@
             });
           }
 
-          DataProcessor.checkNotifications(deduplicatedModels);
+          DataProcessor.checkNotifications(deduplicatedStockIds);
         }
 
         DataProcessor.processArbitrageData(resp);

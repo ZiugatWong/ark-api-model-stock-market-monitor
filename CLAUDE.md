@@ -39,7 +39,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 17. 启动 (行 5524-5562) - 初始化、迁移触发、菜单注册
 
 **关键数据结构（主键均为 stockId）：**
-- `models` - 监控的 stockId 数组
+- `stockIds` - 监控的 stockId 数组
 - `idToModel` - stockId → modelName 映射（每次 /api/stock 拉取刷新）
 - `priceData` - 价格历史 `{[stockId]: [[秒时间戳, 代币价格]]}`
 - `positions` - 持仓数据 `{[stockId]: {shares, avg_cost, locked_until, pnl...}}`
