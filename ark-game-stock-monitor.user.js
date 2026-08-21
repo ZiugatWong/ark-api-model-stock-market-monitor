@@ -94,7 +94,7 @@
         const d = typeof raw === "string" ? JSON.parse(raw) : raw;
         this._cache = {
           stockIds: d.stockIds || [],
-          autoTriggerMinuteEnds: d.autoTriggerMinuteEnds || "3,8",
+          autoTriggerMinuteEnds: d.autoTriggerMinuteEnds || "1,6",
           autoTrigger: !!d.autoTrigger,
           priceData: d.priceData || {},
           lastUpdateTime: d.lastUpdateTime || null,
@@ -606,7 +606,7 @@
 
       // 时间戳归一化：收集所有活跃 tick 的时间戳，统一为最大时间戳
       const activeTimestamps = ticksSlice.map((t) =>
-        Math.floor(Date.parse(t.createdAt) / 1000)
+        Math.floor(Date.parse(t.createdAt) / 1000),
       );
 
       let unifiedTimestamp = null;
@@ -616,9 +616,8 @@
 
         // 如果最大最小时间戳差距超过 5 分钟（300 秒），说明存在旧数据
         // 过滤掉超过 5 分钟的旧数据，只保留最新一批
-        const threshold = (maxTimestamp - minTimestamp > 300)
-          ? maxTimestamp - 300
-          : minTimestamp;
+        const threshold =
+          maxTimestamp - minTimestamp > 300 ? maxTimestamp - 300 : minTimestamp;
 
         // 统一时间戳为最大时间戳
         unifiedTimestamp = maxTimestamp;
@@ -3350,7 +3349,7 @@
       this._mainPanel.innerHTML = `
         <div class="ark-panel-header">
           <div class="header-left">
-            <span class="title">Ark API 模型股市监控</span>
+            <span class="title">Ark 模型股市监控</span>
             <span style="color:var(--ark-label);font-size:12px;"> ver ${GM_info.script.version}</span>
           </div>
           <div class="header-right">
