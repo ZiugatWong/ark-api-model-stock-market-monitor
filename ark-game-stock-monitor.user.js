@@ -11,6 +11,7 @@
 // @match        https://game.arkengine.me/*
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_deleteValue
 // @grant        GM_registerMenuCommand
 // @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest
@@ -228,16 +229,19 @@
           // 查表重建成功，置迁移完成标志（失败则不置，下次启动重试）
           newData.legacyMigrated = true;
           this.save(newData);
+
+          // 迁移成功，删除旧数据（避免长期占用 storage 空间）
+          GM_deleteValue(CONFIG.LEGACY_STORAGE_KEY);
         }
       } catch (e) {
         console.error("[Ark Stock Monitor] 旧数据迁移查表失败:", e);
         // 查表失败时通用配置已迁移，主键数据留待下次重试或用户手动重建
+        // 旧数据保留不删除，供下次迁移重试
       }
 
       // 3. priceData / positions / arbitrageData / holdingsTotalValue 不迁移：
       //    priceData 单位与时间戳语义变更；其余 doFetch 会重写
 
-      // 4. 旧 key 保留作备份，不删除（避免迁移出错无法回滚）
       console.log("[Ark Stock Monitor] 旧数据迁移完成");
     },
   };

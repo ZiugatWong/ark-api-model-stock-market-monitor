@@ -22,7 +22,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 **单文件脚本** `ark-game-stock-monitor.user.js` (~5562 行)，模块化组织：
 1. 配置 (行 24-38) - CONFIG（含 STORAGE_KEY）
 2. 数据结构 (行 39-80) - DEFAULT_DATA（主键为 stockId）
-3. 存储 (行 81-245) - Storage（GM_setValue/GM_getValue + 旧数据迁移 migrateFromLegacy）
+3. 存储 (行 81-245) - Storage（GM_setValue/GM_getValue/GM_deleteValue + 旧数据迁移 migrateFromLegacy）
 4. 主题 (行 246-324) - Theme（主题切换和应用）
 5. 工具函数 (行 325-447) - Utils（含 getModelName 反查）、TimeUtils
 6. API (行 457-570) - 市场数据 /api/stock、余额 /api/me/balance、模型列表
@@ -66,7 +66,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 - **通知触发**：价格从未突破到突破边界时触发；guard 检查全部 4 个渠道（含 Bark）
 - **图表**：Lightweight Charts v4.0.1，价格线（今日高/低、持仓成本线）。无交易标记（新站点无交易历史接口）
 - **表格显示限制**：最近 5 条记录（`CONFIG.TABLE_DISPLAY_LIMIT = 5`）
-- **旧数据迁移**：`Storage.migrateFromLegacy()` 首次启动迁移 windhub_stock_data（通用配置 + API 查表重建 stockId 键），`legacyMigrated` 标志防重复执行，旧 key 保留作备份
+- **旧数据迁移**：`Storage.migrateFromLegacy()` 首次启动迁移 windhub_stock_data（通用配置 + API 查表重建 stockId 键），`legacyMigrated` 标志防重复执行，迁移成功后旧 key 即删除
 
 ## 开发指南
 
@@ -82,7 +82,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 **调试：**
 - 浏览器控制台查看日志（前缀：`[Ark Stock Monitor]`）
 - `GM_getValue("ark_game_stock_data")` 查看存储数据（键已改为 ark_game_stock_data）
-- `GM_getValue("windhub_stock_data")` 旧版数据（迁移备份）
+- `GM_getValue("windhub_stock_data")` 旧版数据（迁成功后已删除，仅迁移前可见）
 - `ChartManager.getInstance()` 检查图表状态
 - `Theme.current()` 查看当前主题
 

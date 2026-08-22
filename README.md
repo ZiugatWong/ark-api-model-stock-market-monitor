@@ -25,6 +25,24 @@
 3. 访问 [game.arkengine.me](https://game.arkengine.me)
 4. 点击浏览器工具栏的 Tampermonkey 图标，选择相应面板打开
 
+### 从 v1.0.4 升级
+
+从 v1.0.4 升级后，首次启动会从旧版 `windhub_stock_data` 迁移到新的数据结构。具体迁移内容如下：
+
+- **直接迁移的通用配置**：主题（theme）、价格数据保留天数（priceDataDaysLimit）、价格突破提醒设置（notificationSettings，含弹窗/声音/Telegram/Bark 开关）、定时自动获取开关（autoTrigger）与分钟尾数（autoTriggerMinuteEnds）、数据服务地址（dataServiceUrl）
+- **迁移后自动删除旧数据**：迁移完成后会删除旧版 `windhub_stock_data`，释放存储空间；如因网络等原因迁移失败，旧数据会保留待下次启动重试
+
+**以 stockId 为主键重建的数据（依赖迁移瞬间的在线 API 查表）：**
+- 监控模型列表 `stockIds`（由旧 modelName 数组经查表映射为 stockId 数组）
+- 价格突破提醒配置 `notifications`（旧键 modelName → 新键 stockId）
+- 模型颜色标识 `modelColors`（旧键 modelName → 新键 stockId）
+
+**不迁移的数据：**
+- 价格历史 `priceData`（价格单位与时间戳语义已变更，无法直接沿用）
+- 持仓 `positions`、套利榜 `arbitrageData`、持仓总值 `holdingsTotalValue`（这些会在运行 `doFetch` 时自动重新拉取重建）
+
+> 提示：若查表成功则一次迁移完成；若失败，通用配置已迁移，主键相关数据留待下次启动重试。
+
 ## 功能面板
 
 所有面板均支持独立显示/隐藏、拖拽移动，标题栏左侧为面板名，右侧为操作按钮。
@@ -221,7 +239,6 @@
 - **数据缓存**：5 分钟缓存机制（模型列表），减少 API 调用
 - **自动清理**：按保留天数自动清理旧价格数据
 - **数据同步**：从自建服务批量拉取历史价格
-- **旧数据迁移**：首次启动自动从旧版 windhub_stock_data 迁移（含模型名/pk 重建）
 
 ## 技术栈
 
