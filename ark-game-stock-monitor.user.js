@@ -593,6 +593,12 @@
 
   // ==================== 数据处理 ====================
   const DataProcessor = {
+    // 处理市场行情数据。
+    // 注意：response.stocks[].id（即 stockId）是数字而非字符串（API 返回数值型 id），
+    // 因此本函数写入的 priceData 键、deduplicatedStockIds 元素、positions 键、
+    // arbitrageData[].stockId 等均为 number。下游做 Set.has / Array.includes 等
+    // 类型敏感比较时，需确保参与比较的另一方也是 number，否则 "123" !== 123 会漏匹配
+    // （见 checkNotifications 中对 notifications 字符串键的 Number() 归一处理）。
     processMarketData(response) {
       if (!response || !Array.isArray(response.stocks)) {
         return { data: null, deduplicatedStockIds: [] };
@@ -801,7 +807,8 @@
       const triggered = [];
       const monitoredIds = new Set(data.stockIds);
 
-      for (const stockId of notificationKeys) {
+      for (const key of notificationKeys) {
+        const stockId = Number(key);
         if (!monitoredIds.has(stockId)) continue;
         if (deduplicatedStockIds.includes(stockId)) continue;
 
