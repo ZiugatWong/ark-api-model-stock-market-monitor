@@ -2,7 +2,7 @@
 // @name         Ark API 模型股市监控
 // @description  Ark 模型股市数据聚合分析与价格变动通知（game.arkengine.me）
 // @namespace    http://tampermonkey.net/
-// @version      1.0.4
+// @version      1.0.5
 // @author       ziugat
 // @license      GPL-3.0
 // @homepage     https://github.com/ZiugatWong/ark-api-model-stock-market-monitor
@@ -345,6 +345,21 @@
 
     pad(n) {
       return String(n).padStart(2, "0");
+    },
+
+    // 千分位分隔（支持小数，仅对整数部分分隔）
+    formatThousands(value) {
+      if (
+        value === null ||
+        value === undefined ||
+        value === "" ||
+        isNaN(Number(value))
+      )
+        return "-";
+      const num = Number(value);
+      const [intPart, decPart] = String(num).split(".");
+      const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return decPart ? `${formattedInt}.${decPart}` : formattedInt;
     },
 
     formatDateTime(timestampMs, format = "full") {
@@ -4585,12 +4600,12 @@
       const enabledHtml = mr.enabled
         ? '<span style="color:#22c55e;font-weight:600;">● 开市</span>'
         : '<span style="color:#ef4444;font-weight:600;">● 休市</span>';
-      const feeText = `${r.buyFeePct ?? "-"}% / ${r.sellFeePct ?? "-"}%`;
+      const feeText = `买入 ${r.buyFeePct ?? "-"}% / 卖出 ${r.sellFeePct ?? "-"}%`;
       el.innerHTML = `
         ${enabledHtml}
         <div style="margin-top:6px;font-size:12px;line-height:1.7;">
           <div>买卖手续费：<strong>${feeText}</strong></div>
-          <div>持仓时长：<strong>${r.holdMinutes ?? "-"} 分钟</strong></div>
+          <div>持仓锁定时长：<strong>${r.holdMinutes ?? "-"} 分钟</strong></div>
         </div>
       `;
     },
@@ -5111,12 +5126,14 @@
 
       if (userTokensEl) {
         userTokensEl.textContent =
-          data.userTokens !== null ? String(data.userTokens) : "-";
+          data.userTokens !== null
+            ? Utils.formatThousands(data.userTokens)
+            : "-";
       }
       if (holdingsTotalEl) {
         holdingsTotalEl.textContent =
           data.holdingsTotalValue !== null
-            ? data.holdingsTotalValue.toFixed(2)
+            ? Utils.formatThousands(data.holdingsTotalValue.toFixed(2))
             : "-";
       }
     },
