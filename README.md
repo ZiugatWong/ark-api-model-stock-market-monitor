@@ -1,10 +1,14 @@
-# Ark 模型股市监控
-
 <div align="center">
+<h1>Ark 模型股票监控</h1>
+<a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Greasyfork Version" src="https://img.shields.io/greasyfork/v/582321?style=flat-square"></a>
+<a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Downloads Total" src="https://img.shields.io/greasyfork/dt/582321?style=flat-square&color=green"></a>
+<a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Downloads Per Day" src="https://img.shields.io/greasyfork/dd/582321?style=flat-square&color=orange"></a>
+<a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Rating" src="https://img.shields.io/greasyfork/rating-count/582321?style=flat-square"></a>
+<br>
 <br>
 </div>
 
-为 [game.arkengine.me](https://game.arkengine.me)  Ark 站点里的模型股市提供实时价格监控、历史数据可视化、持仓盈亏计算和通知提醒的全功能 Tampermonkey 面板（原 windhub.cc 站点已迁移至此）。
+为  Ark 站点 [game.arkengine.me](https://game.arkengine.me) 里的模型股市提供实时价格监控、历史数据可视化、持仓盈亏计算和通知提醒的全功能 Tampermonkey 面板。
 
 ## 界面预览
 

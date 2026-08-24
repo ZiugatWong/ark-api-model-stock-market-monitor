@@ -2,7 +2,7 @@
 // @name         Ark API 模型股市监控
 // @description  Ark 模型股市数据聚合分析与价格变动通知（game.arkengine.me）
 // @namespace    http://tampermonkey.net/
-// @version      1.0.6
+// @version      1.0.7
 // @author       ziugat
 // @license      GPL-3.0
 // @homepage     https://github.com/ZiugatWong/ark-api-model-stock-market-monitor
@@ -2211,6 +2211,29 @@
       color: var(--ark-text);
       border-color: var(--ark-border);
       box-shadow: 0 8px 32px var(--ark-shadow);
+      /* 让原生控件（滚动条、数字输入加减按钮等）随日间主题变浅，
+         覆盖宿主页面可能设置的 color-scheme: dark */
+      color-scheme: light;
+    }
+
+    /* 滚动条：兜底覆盖宿主页面可能手写的深色 ::-webkit-scrollbar */
+    body.ark-theme-light [id^="ark-"] ::-webkit-scrollbar,
+    body.ark-theme-light .ark-chart-panel ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    body.ark-theme-light [id^="ark-"] ::-webkit-scrollbar-track,
+    body.ark-theme-light .ark-chart-panel ::-webkit-scrollbar-track {
+      background: var(--ark-surface);
+    }
+    body.ark-theme-light [id^="ark-"] ::-webkit-scrollbar-thumb,
+    body.ark-theme-light .ark-chart-panel ::-webkit-scrollbar-thumb {
+      background: var(--ark-border-2);
+      border-radius: 4px;
+    }
+    body.ark-theme-light [id^="ark-"] ::-webkit-scrollbar-thumb:hover,
+    body.ark-theme-light .ark-chart-panel ::-webkit-scrollbar-thumb:hover {
+      background: var(--ark-muted);
     }
 
     /* 标题栏 */
