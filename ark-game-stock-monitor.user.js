@@ -2,7 +2,7 @@
 // @name         Ark API 模型股市监控
 // @description  Ark 模型股市数据聚合分析与价格变动通知（game.arkengine.me）
 // @namespace    http://tampermonkey.net/
-// @version      1.0.7
+// @version      1.0.8
 // @author       ziugat
 // @license      GPL-3.0
 // @homepage     https://github.com/ZiugatWong/ark-api-model-stock-market-monitor
@@ -1380,7 +1380,7 @@
     }
     .ark-panel-header .info-btn-wrap:hover .info-tooltip { display: block; }
     #ark-stock-panel .panel-body {
-      padding: 8px 14px;
+      padding: 6px 10px;
       overflow-y: auto;
       flex: 1;
       background: #1a1a1a;
@@ -1407,7 +1407,7 @@
     }
     #ark-settings-panel.visible { display: flex; }
     #ark-settings-panel .panel-body {
-      padding: 12px 14px;
+      padding: 6px 10px;
       overflow-y: auto;
       flex: 1;
       background: #1a1a1a;
@@ -1434,7 +1434,7 @@
     }
     #ark-data-maintenance-panel.visible { display: flex; }
     #ark-data-maintenance-panel .panel-body {
-      padding: 12px 14px;
+      padding: 6px 10px;
       overflow-y: auto;
       flex: 1;
       background: #1a1a1a;
@@ -1460,7 +1460,7 @@
     }
     #ark-price-panel.visible { display: flex; }
     #ark-price-panel .panel-body {
-      padding: 12px 14px;
+      padding: 6px 10px;
       overflow-y: auto;
       flex: 1;
       background: #1a1a1a;
@@ -1487,7 +1487,7 @@
     }
     #ark-trade-panel.visible { display: flex; }
     #ark-trade-panel .panel-body {
-      padding: 12px 14px;
+      padding: 6px 10px;
       overflow-y: auto;
       flex: 1;
       background: #1a1a1a;
@@ -1516,7 +1516,7 @@
     }
     #ark-positions-panel.visible { display: flex; }
     #ark-positions-panel .panel-body {
-      padding: 12px 14px;
+      padding: 6px 10px;
       overflow-y: auto;
       flex: 1;
       background: #1a1a1a;
@@ -1545,7 +1545,7 @@
     }
     #ark-arbitrage-panel.visible { display: flex; }
     #ark-arbitrage-panel .panel-body {
-      padding: 12px 14px;
+      padding: 6px 10px;
       overflow-y: auto;
       flex: 1;
       background: #1a1a1a;
@@ -1625,7 +1625,7 @@
     .ark-latest-price-link:hover, .ark-historical-trades-link:hover, .ark-arbitrage-link:hover, .ark-positions-link:hover { text-decoration: underline; }
 
     .ark-section {
-      margin-bottom: 10px;
+      margin: 5px 0;
       padding: 10px;
       background: #222;
       border-radius: 8px;
@@ -5138,8 +5138,7 @@
 
       // 标题（textContent 赋值，天然免转义）
       const titleEl = panel.querySelector("#ark-trade-title");
-      titleEl.textContent =
-        action === "buy" ? "买入操作" : "卖出操作";
+      titleEl.textContent = action === "buy" ? "买入操作" : "卖出操作";
 
       // 摘要（纵向排列，textContent 赋值，天然免转义）
       const infoEl = panel.querySelector("#ark-trade-info");

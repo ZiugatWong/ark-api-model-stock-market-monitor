@@ -54,7 +54,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 
 - **认证**：同源 cookie 鉴权（`ptd_session`），`fetch` + `credentials: "include"`，无请求头鉴权
 - **API**：`window.location.origin` + `GET /api/stock`（行情）、`POST /api/stock`（买入/卖出）、`/api/me/balance`（代币）
-- **买入/卖出**：右键模型名打开一级菜单（买入/卖出/颜色标识），`UIPanels.openTradePanel` 打开单例交易面板；前端按实时行情+余额校验（手续费、休市、持仓锁定、股数范围），提交走 `API.submitTrade`（POST /api/stock，`idempotencyKey` 幂等）
+- **买入/卖出**：右键模型名打开一级菜单（买入/卖出/颜色标识），`UIPanels.openTradePanel` 打开单例交易面板；前端按实时行情 + 余额校验（手续费、休市、持仓锁定、股数范围），提交走 `API.submitTrade`（POST /api/stock，`idempotencyKey` 幂等）
 - **右键菜单**：`UIRenderers.showTradeContextMenu` 取代原 `showColorMenu`，卖出生效项需有持仓，颜色标识下沉为二级浮层（`_buildColorSubmenu`）
 - **主键策略**：全部用 stockId 串联，展示模型名时通过 `idToModel` 查表（规避模型改名/重名风险）
 - **价格历史时间戳**：stale=false（活跃）模型，取 ticks 前 n 条按 stockId 匹配的 createdAt（秒）
