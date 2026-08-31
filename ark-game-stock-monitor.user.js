@@ -1443,8 +1443,9 @@
 
     #ark-price-panel {
       position: fixed;
-      top: 60px;
-      right: 540px;
+      top: 12.5vh;
+      left: 50%;
+      transform: translateX(-50%);
       min-width: 400px;
       background: #1a1a1a;
       color: #f0f0f0;
@@ -1806,13 +1807,16 @@
     }
     .ark-price-table {
       width: 100%;
-      border-collapse: collapse;
+      border-collapse: separate;
+      border-spacing: 0;
       font-size: 12px;
+      table-layout: fixed;
     }
     .ark-price-table th,
     .ark-price-table td {
       padding: 5px 8px;
-      border: 1px solid #333;
+      border-right: 1px solid #333;
+      border-bottom: 1px solid #333;
       text-align: center;
       white-space: nowrap;
     }
@@ -1822,13 +1826,39 @@
       font-weight: 600;
       position: sticky;
       top: 0;
+      z-index: 2;
       white-space: normal;
       word-break: break-word;
     }
     .ark-price-table td.price-up { color: #00A854; }
     .ark-price-table td.price-down { color: #F55454; }
     .ark-price-table td.price-neutral { }
-    .ark-price-table th.time-cell, .ark-price-table td.time-cell { white-space: nowrap; }
+    /* 时间列：容纳 MM-DD HH:MM:SS（14字符）短时间串，不换行；
+       横向滚动时固定在最左，背景与面板同步避免透字。
+       th 的 z-index 需高于其他表头单元格(2)，否则滚动时被模型名列覆盖 */
+    .ark-price-table th.time-cell,
+    .ark-price-table td.time-cell {
+      white-space: nowrap;
+      width: 9.5em;
+      position: sticky;
+      left: 0;
+      background: #222;
+    }
+    .ark-price-table th.time-cell {
+      z-index: 3;
+    }
+    .ark-price-table td.time-cell {
+      background: #1a1a1a;
+      z-index: 1;
+    }
+    /* 价格列：按最多4位整数+2位小数（如 9999.99，7字符）估算，保证不换行；
+       表头（模型名）跟随数据单元格宽度，在固定列宽内允许换行 */
+    .ark-price-table th:not(.time-cell),
+    .ark-price-table td.price-up,
+    .ark-price-table td.price-down,
+    .ark-price-table td.price-neutral {
+      width: 5.4em;
+    }
 
     .ark-positions-table {
       width: 100%;
@@ -2340,6 +2370,13 @@
     body.ark-theme-light .ark-positions-table th {
       background: var(--ark-elevated);
       color: var(--ark-text);
+    }
+    /* 亮色下时间列（横向固定）背景与面板/表头一致，避免滚动透字 */
+    body.ark-theme-light .ark-price-table th.time-cell {
+      background: var(--ark-elevated);
+    }
+    body.ark-theme-light .ark-price-table td.time-cell {
+      background: var(--ark-surface);
     }
     body.ark-theme-light .ark-price-table th a.model-chart-link {
       color: var(--ark-text);
@@ -5331,7 +5368,9 @@
       const pricePanel = document.querySelector("#ark-price-panel");
       if (pricePanel) {
         const calculatedWidth = 80 * stockIds.length + 150;
-        const finalWidth = Math.max(400, calculatedWidth);
+        // 封顶不超过视口宽度 90%，避免模型过多时面板无限延伸
+        const maxWidth = Math.floor(window.innerWidth * 0.9);
+        const finalWidth = Math.max(400, Math.min(calculatedWidth, maxWidth));
         pricePanel.style.width = finalWidth + "px";
       }
 
