@@ -1792,13 +1792,13 @@
       padding: 5px 14px;
       border-radius: 5px;
       border: none;
-      background: #a6e3a1;
-      color: #1e1e2e;
+      background: var(--ark-btn-2);
+      color: var(--ark-text);
       font-weight: 600;
       cursor: pointer;
       font-size: 12px;
     }
-    .ark-green-btn:hover { background: #94e2d5; }
+    .ark-green-btn:hover { background: var(--ark-btn-2-hover); }
 
     .ark-table-wrap {
       overflow-x: auto;
