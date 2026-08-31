@@ -511,6 +511,17 @@
       });
     },
 
+    // 买入/卖出面板专用：并行拉取行情与余额（纯展示用，不写 Storage）
+    async fetchTradePanelData() {
+      const requestedAt = Date.now(); // 数据时间 = 发起请求的时间
+      const [market, balance] = await Promise.all([
+        this.fetchMarketData(),
+        // 余额失败不阻塞行情展示，渲染时按 null 显示 "-"
+        this.fetchBalance().catch(() => null),
+      ]);
+      return { requestedAt, market, balance };
+    },
+
     fetchAvailableModels(forceRefresh = false) {
       const data = Storage.load();
       const now = Date.now();
@@ -588,6 +599,38 @@
           },
         });
       });
+    },
+
+    // POST /api/stock — 买入/卖出（同源 cookie 鉴权）
+    async submitTrade({ action, stockId, shares }) {
+      const payload = {
+        action, // "buy" | "sell"
+        idempotencyKey: `stock:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`,
+        modelName: Utils.getModelName(stockId),
+        shares,
+      };
+      const resp = await fetch(`${Utils.getBaseUrl()}/api/stock`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "*/*",
+        },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      let body = null;
+      try {
+        body = await resp.json();
+      } catch {
+        // 非 JSON 响应体，忽略
+      }
+      if (!resp.ok) {
+        // 错误体格式未知，保守提取：优先 message / error 字段，回退 HTTP 状态码
+        const msg =
+          (body && (body.message || body.error)) || `交易失败: ${resp.status}`;
+        throw new Error(msg);
+      }
+      return body; // { replayed, tradeId, totalTokens, balanceAfter }
     },
   };
 
@@ -1423,14 +1466,12 @@
       border-radius: 0 0 10px 10px;
     }
 
-    #ark-trades-panel {
+    #ark-trade-panel {
       position: fixed;
-      top: 60px;
-      right: 540px;
-      width: max-content;
-      max-width: 900px;
-      min-width: 500px;
-      max-height: 80vh;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 240px;
       background: #1a1a1a;
       color: #f0f0f0;
       border: 1px solid #333;
@@ -1443,17 +1484,13 @@
       flex-direction: column;
       overflow: hidden;
     }
-    #ark-trades-panel.visible { display: flex; }
-    #ark-trades-panel .panel-body {
+    #ark-trade-panel.visible { display: flex; }
+    #ark-trade-panel .panel-body {
       padding: 12px 14px;
       overflow-y: auto;
       flex: 1;
       background: #1a1a1a;
       border-radius: 0 0 10px 10px;
-    }
-    #ark-trades-table-wrap {
-      max-height: 400px;
-      overflow-y: auto;
     }
 
     #ark-positions-panel {
@@ -1738,7 +1775,7 @@
     }
     .ark-minute-input:focus { border-color: #89b4fa; }
 
-    .ark-manual-btn {
+    .ark-blue-btn {
       padding: 5px 14px;
       border-radius: 5px;
       border: none;
@@ -1748,10 +1785,10 @@
       cursor: pointer;
       font-size: 12px;
     }
-    .ark-manual-btn:hover { background: #b4befe; }
-    .ark-manual-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ark-blue-btn:hover { background: #b4befe; }
+    .ark-blue-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .ark-save-btn {
+    .ark-green-btn {
       padding: 5px 14px;
       border-radius: 5px;
       border: none;
@@ -1761,7 +1798,7 @@
       cursor: pointer;
       font-size: 12px;
     }
-    .ark-save-btn:hover { background: #94e2d5; }
+    .ark-green-btn:hover { background: #94e2d5; }
 
     .ark-table-wrap {
       overflow-x: auto;
@@ -2203,7 +2240,7 @@
     body.ark-theme-light #ark-settings-panel,
     body.ark-theme-light #ark-data-maintenance-panel,
     body.ark-theme-light #ark-price-panel,
-    body.ark-theme-light #ark-trades-panel,
+    body.ark-theme-light #ark-trade-panel,
     body.ark-theme-light #ark-positions-panel,
     body.ark-theme-light #ark-arbitrage-panel,
     body.ark-theme-light .ark-chart-panel {
@@ -2248,7 +2285,7 @@
     body.ark-theme-light #ark-settings-panel .panel-body,
     body.ark-theme-light #ark-data-maintenance-panel .panel-body,
     body.ark-theme-light #ark-price-panel .panel-body,
-    body.ark-theme-light #ark-trades-panel .panel-body,
+    body.ark-theme-light #ark-trade-panel .panel-body,
     body.ark-theme-light #ark-positions-panel .panel-body,
     body.ark-theme-light #ark-arbitrage-panel .panel-body {
       background: var(--ark-surface);
@@ -2413,7 +2450,7 @@
     .ark-color-swatch {
       width: 20px;
       height: 20px;
-      border-radius: 50%;
+      border-radius: 4px;
       border: 2px solid transparent;
       transition: transform 0.2s ease, border-color 0.2s ease;
     }
@@ -2437,6 +2474,118 @@
     }
     .ark-color-remove:hover {
       background: var(--ark-btn-2-hover);
+    }
+
+    /* 右键交易菜单（一级项目录） */
+    .ark-trade-menu {
+      min-width: 120px;
+      padding: 6px;
+    }
+    .ark-menu-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      color: var(--ark-text);
+      cursor: pointer;
+      transition: background 0.15s ease;
+      user-select: none;
+    }
+    .ark-menu-item:hover {
+      background: var(--ark-popup-item);
+    }
+    .ark-menu-item-disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .ark-menu-item-disabled:hover {
+      background: none;
+    }
+    .ark-menu-arrow {
+      color: var(--ark-muted);
+      font-size: 12px;
+    }
+
+    /* 交易面板（买入/卖出） */
+    .ark-trade-info {
+      font-size: 12px;
+      color: var(--ark-muted);
+      margin-bottom: 10px;
+    }
+    .ark-trade-info-row {
+      display: flex;
+      align-items: baseline;
+      line-height: 1.7;
+    }
+    .ark-trade-info-label {
+      color: var(--ark-label);
+      width: 72px;
+      flex-shrink: 0;
+    }
+    /* 数据时间行的内联刷新按钮（紧凑版） */
+    .ark-trade-info .ark-refresh-btn {
+      font-size: 12px;
+      margin: 0 0 0 6px;
+      padding: 0 4px;
+      line-height: 1.7;
+    }
+    .ark-trade-value-hint {
+      font-size: 12px;
+      color: var(--ark-muted);
+      margin-bottom: 4px;
+      min-height: 1.4em;
+    }
+    .ark-trade-value-hint.ok {
+      color: #4caf50;
+      font-weight: 600;
+    }
+    .ark-trade-value-hint.err {
+      color: #ef4444;
+      font-weight: 600;
+    }
+    .ark-trade-quick-label {
+      font-size: 12px;
+      color: var(--ark-label);
+      margin-bottom: 4px;
+      margin-top: 14px;
+    }
+    .ark-trade-quick-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .ark-trade-lock {
+      color: #ef4444;
+      font-size: 12px;
+      margin: 6px 0;
+      line-height: 1.6;
+    }
+    .ark-trade-status {
+      min-height: 18px;
+      font-size: 12px;
+      margin: 8px 0;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .ark-trade-status.ok {
+      color: #1db110;
+    }
+    .ark-trade-status.err {
+      color: #af0837;
+    }
+    .ark-trade-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .ark-trade-actions button {
+      flex: 1;
+      padding: 7px 14px;
     }
 
     /* 开关打开态 */
@@ -3375,7 +3524,12 @@
     _mainPanel: null,
     _settingsPanel: null,
     _pricePanel: null,
-    _tradesPanel: null,
+    _tradePanel: null, // 买入/卖出交易面板（单例，按 action 切换内容）
+    _tradeBusy: false, // 交易请求进行中守卫（防重复提交）
+    _tradeRefreshBusy: false, // 交易面板数据刷新进行中守卫（防重复请求）
+    _tradeRefreshQueued: false, // 刷新进行中又有新刷新请求时，结束后补一次
+    _tradeRefreshQueuedMsg: null, // 排队刷新要回显的状态提示
+    _tradeState: null, // 交易面板打开时的数据快照
     _positionsPanel: null,
     _arbitragePanel: null,
     _dataMaintenancePanel: null,
@@ -3803,19 +3957,19 @@
                 <input type="checkbox" id="ark-auto-toggle" />
                 <span class="slider"></span>
               </label>
-              <button class="ark-manual-btn" id="ark-fetch-btn">手动获取</button>
+              <button class="ark-blue-btn" id="ark-fetch-btn">手动获取</button>
             </div>
             <div class="ark-trigger-row">
               <span style="color:var(--ark-label);font-size:12px;">匹配分钟尾数：</span>
               <input type="text" class="ark-minute-input" id="ark-minute-ends" placeholder="如 3,8" title="如填 3,8 代表每小时的 03、08、13、18...分钟，会自动触发行情获取" />
-              <button class="ark-save-btn" id="ark-save-minute-btn">保存</button>
+              <button class="ark-green-btn" id="ark-save-minute-btn">保存</button>
             </div>
           </div>
 
           <div class="ark-section" id="ark-notification-section">
             <div class="ark-section-label">价格突破提醒</div>
             <div class="ark-trigger-row">
-              <button class="ark-manual-btn" id="ark-test-notif-btn">测试已打开的提醒</button>
+              <button class="ark-blue-btn" id="ark-test-notif-btn">测试已打开的提醒</button>
             </div>
             <div class="ark-trigger-row">
               <span style="color:var(--ark-label);font-size:12px;">开启浏览器弹窗提醒：</span>
@@ -3877,7 +4031,7 @@
                 <input type="number" class="ark-minute-input" id="ark-notif-upper" style="width: 80px;" min="0" step="1" />
                 <span style="color:var(--ark-label);font-size:12px; margin-left: 10px;">向下突破：</span>
                 <input type="number" class="ark-minute-input" id="ark-notif-lower" style="width: 80px;" min="0" step="1" />
-                <button class="ark-save-btn" id="ark-save-notif-btn" style="margin-left: 10px;">添加</button>
+                <button class="ark-green-btn" id="ark-save-notif-btn" style="margin-left: 10px;">添加</button>
               </div>
             </div>
             <div id="ark-notif-list" style="margin-top: 10px; max-height: 250px; overflow-y: auto;"></div>
@@ -4177,7 +4331,7 @@
               <input type="number" class="ark-minute-input" id="ark-price-days-limit"
                     placeholder="天数" min="1" step="1" value="${data.priceDataDaysLimit}"
                     style="width: 80px;" />
-              <button class="ark-save-btn" id="ark-save-price-days-btn">保存</button>
+              <button class="ark-green-btn" id="ark-save-price-days-btn">保存</button>
             </div>
             <div style="margin-top: 8px; font-size: 11px; color: var(--ark-muted);">
               注：设置后不会立即清理，待第二天第一次获取数据时才自动清理超出时间范围的数据
@@ -4194,7 +4348,7 @@
                      style="flex: 1; padding: 6px 10px; border-radius: 4px; border: 1px solid var(--ark-border); background: var(--ark-input-bg); color: var(--ark-text-primary);" />
             </div>
             <div class="ark-trigger-row" style="margin-top: 12px;">
-              <button class="ark-manual-btn" id="ark-sync-price-data-btn" title="同步最近7天的价格数据">
+              <button class="ark-blue-btn" id="ark-sync-price-data-btn" title="同步最近7天的价格数据">
                 价格同步
               </button>
             </div>
@@ -4409,7 +4563,7 @@
                 <div>小提示：</div>
                 <div>1. <span style="color:#F55454">红字</span>表示较前一时刻价格下跌，<span style="color:#00A854">绿字</span>表示较前一时刻价格上涨</div>
                 <div>2. 表头模型名称为<span style="color:#a855f7">紫色</span>表示有持仓，名称前的🔒表示持仓锁定中</div>
-                <div>3. 表头模型名称处右键点击可设置颜色标识（红/绿/黄/橙/粉/青），但优先级低于持仓颜色</div>
+                <div>3. 表头模型名称处右键点击可打开交易菜单：买入 / 卖出 / 颜色标识（红/绿/黄/橙/粉/青，优先级低于持仓颜色）</div>
                 <div>4. 点击表头模型名称可查看该模型分时图：</div>
                 <pre>① 分时图窗口可拖拽改变大小\n② 分时图内拖拽可移动时间窗口\n③ 数据线和坐标轴处可通过鼠标滚轮实现范围缩放</pre>
               </span>
@@ -4612,6 +4766,466 @@
       }
 
       return this._arbitragePanel;
+    },
+
+    // ==================== 买入/卖出交易面板 ====================
+
+    // 打开交易面板（单例复用，按 action 重渲染表单区）
+    openTradePanel(action, stockId) {
+      const panel =
+        this._tradePanel || (this._tradePanel = this.createTradePanel());
+      panel.classList.add("visible");
+      this.bringToFront(panel);
+      this._renderTradeForm(action, stockId); // 先用本地快照即时展示
+      this._refreshTradePanelData(); // 再实时拉取覆盖
+    },
+
+    createTradePanel() {
+      const panel = document.createElement("div");
+      panel.id = "ark-trade-panel";
+
+      panel.innerHTML = `
+        <div class="ark-panel-header">
+          <div class="header-left">
+            <span class="title" id="ark-trade-title"></span>
+          </div>
+          <div class="header-right">
+            <button class="close-btn" title="关闭">&times;</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="ark-section">
+            <div class="ark-trade-info" id="ark-trade-info"></div>
+            <div class="ark-trigger-row">
+              <span style="color:var(--ark-label);font-size:12px;">股数：</span>
+              <input type="number" class="ark-minute-input" id="ark-trade-shares" min="1" step="1" style="width:120px;" />
+            </div>
+            <div class="ark-trade-value-hint" id="ark-trade-value-hint"></div>
+            <div class="ark-trade-quick-label" id="ark-trade-quick-label">填入全部可用量的：</div>
+            <div class="ark-trade-quick-grid" id="ark-trade-quick-row">
+              <button class="ark-green-btn" data-ratio="all">全部</button>
+              <button class="ark-green-btn" data-ratio="half">1/2</button>
+              <button class="ark-green-btn" data-ratio="quarter">1/4</button>
+              <button class="ark-green-btn" data-ratio="tenth">1/10</button>
+            </div>
+            <div class="ark-trade-lock" id="ark-trade-lock" hidden></div>
+            <div class="ark-trade-status" id="ark-trade-status"></div>
+            <div class="ark-trade-actions">
+              <button class="ark-blue-btn" id="ark-trade-confirm">确定</button>
+              <button class="ark-green-btn" id="ark-trade-cancel">取消</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(panel);
+      Interactions.initDrag(panel, panel.querySelector(".ark-panel-header"));
+
+      // 关闭 / 取消：仅隐藏面板
+      const closePanel = () => panel.classList.remove("visible");
+      panel.querySelector(".close-btn").addEventListener("click", closePanel);
+      panel
+        .querySelector("#ark-trade-cancel")
+        .addEventListener("click", closePanel);
+
+      // 快捷按钮：按比例计算股数并填入输入框
+      panel.querySelectorAll("#ark-trade-quick-row button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const state = this._tradeState;
+          if (!state || btn.disabled) return;
+          const ratios = { all: 1, half: 0.5, quarter: 0.25, tenth: 0.1 };
+          const shares = Math.floor(
+            state.maxShares * (ratios[btn.dataset.ratio] || 1),
+          );
+          const input = panel.querySelector("#ark-trade-shares");
+          input.value = shares >= 1 ? shares : "";
+          this._updateTradeValueHint();
+        });
+      });
+
+      // 实时更新市值提示
+      panel.querySelector("#ark-trade-shares").addEventListener("input", () => {
+        this._updateTradeValueHint();
+      });
+
+      // 确定按钮：校验 → 提交 → 成功提示后自动关闭 → 刷新
+      panel
+        .querySelector("#ark-trade-confirm")
+        .addEventListener("click", async () => {
+          if (this._tradeBusy) return;
+          const state = this._tradeState;
+          if (!state || state.confirmDisabled) return;
+
+          const input = panel.querySelector("#ark-trade-shares");
+          const statusEl = panel.querySelector("#ark-trade-status");
+          const confirmBtn = panel.querySelector("#ark-trade-confirm");
+          const shares = Number(input.value);
+
+          // 前端校验（服务端仍为最终防线）
+          if (!Number.isInteger(shares) || shares < 1) {
+            statusEl.textContent = "✗ 请输入正整数股数";
+            statusEl.className = "ark-trade-status err";
+            return;
+          }
+          if (shares > state.maxShares) {
+            statusEl.textContent =
+              state.action === "buy"
+                ? "✗ 超出可用代币（含手续费）"
+                : "✗ 超出持仓股数";
+            statusEl.className = "ark-trade-status err";
+            return;
+          }
+
+          this._tradeBusy = true;
+          confirmBtn.disabled = true;
+          confirmBtn.textContent = "提交中...";
+          statusEl.textContent = "";
+          statusEl.className = "ark-trade-status";
+
+          try {
+            await API.submitTrade({
+              action: state.action,
+              stockId: state.stockId,
+              shares,
+            });
+
+            statusEl.textContent = `✓ ${state.action === "buy" ? "买入" : "卖出"} ${shares} 股成功`;
+            statusEl.className = "ark-trade-status ok";
+
+            // 保持面板打开，仅复位按钮与忙碌标记，便于继续交易
+            this._tradeBusy = false;
+            confirmBtn.disabled = false;
+            confirmBtn.textContent =
+              state.action === "buy" ? "确定买入" : "确定卖出";
+            input.value = "";
+            this._updateTradeValueHint();
+
+            // 交易成功后实时拉取最新数据刷新面板（fire-and-forget，成功提示由刷新后回显）
+            this._refreshTradePanelData(
+              `✓ ${state.action === "buy" ? "买入" : "卖出"} ${shares} 股成功`,
+            );
+          } catch (err) {
+            console.error("[Ark Stock Monitor] 交易失败:", err);
+            statusEl.textContent = `✗ ${err.message}`;
+            statusEl.className = "ark-trade-status err";
+            this._tradeBusy = false;
+            confirmBtn.disabled = false;
+            confirmBtn.textContent =
+              state.action === "buy" ? "确定买入" : "确定卖出";
+          }
+        });
+
+      return panel;
+    },
+
+    // 按输入股数实时展示对应市值（买入=需支付，卖出=收入），并按余额/持仓校验着色
+    _updateTradeValueHint() {
+      const panel = this._tradePanel;
+      if (!panel) return;
+      const hintEl = panel.querySelector("#ark-trade-value-hint");
+      const input = panel.querySelector("#ark-trade-shares");
+      const state = this._tradeState;
+      if (!hintEl || !input || !state) return;
+      const shares = Number(input.value);
+      const isBuy = state.action === "buy";
+      hintEl.textContent = "";
+      hintEl.classList.remove("ok", "err");
+      // 股数为空 / 非正整数 / 无现价时留空，避免干扰输入
+      if (
+        !Number.isInteger(shares) ||
+        shares <= 0 ||
+        state.price == null ||
+        state.price <= 0
+      )
+        return;
+      const pct = isBuy ? state.buyFeePct : state.sellFeePct;
+      const factor = isBuy ? 1 + pct / 100 : 1 - pct / 100;
+      const amount = shares * state.price * factor;
+      const formatted = Utils.formatThousands(Math.round(amount * 100) / 100);
+
+      if (isBuy) {
+        if (state.balance == null || amount > state.balance) {
+          // 买入：需支付金额（含手续费）超出可用代币
+          hintEl.textContent = "✗ 超出可用代币";
+          hintEl.classList.add("err");
+          return;
+        }
+        hintEl.textContent = `需支付：${formatted} 代币`;
+        hintEl.classList.add("ok");
+      } else {
+        const posShares = state.pos ? state.pos.shares : 0;
+        if (shares > posShares) {
+          // 卖出：填入股数超出持仓
+          hintEl.textContent = "✗ 超出持仓";
+          hintEl.classList.add("err");
+          return;
+        }
+        hintEl.textContent = `收入为：${formatted} 代币`;
+        hintEl.classList.add("ok");
+      }
+    },
+
+    // 实时拉取行情+余额并重渲染交易面板（纯展示，不写 Storage）
+    // statusMessage：交易成功提示，重渲染后回显到状态行
+    async _refreshTradePanelData(statusMessage) {
+      const panel = this._tradePanel;
+      const state = this._tradeState;
+      if (!panel || !state) return;
+      // 交易提交中不刷新：重渲染会复位 _tradeBusy 与确认按钮，可能造成重复提交
+      if (this._tradeBusy) return;
+      // 已有刷新在进行：排队，结束后补一次（避免与交易回调互相丢弃）
+      if (this._tradeRefreshBusy) {
+        this._tradeRefreshQueued = true;
+        if (statusMessage) this._tradeRefreshQueuedMsg = statusMessage;
+        return;
+      }
+      this._tradeRefreshBusy = true;
+      const refreshBtn = panel.querySelector(
+        "#ark-trade-info .ark-refresh-btn",
+      );
+      if (refreshBtn) refreshBtn.classList.add("loading");
+      const { action, stockId } = state;
+      try {
+        const fresh = await API.fetchTradePanelData();
+        // 请求期间面板可能已切换模型、关闭或发起了交易
+        const cur = this._tradeState;
+        if (!cur || cur.action !== action || cur.stockId !== stockId) return;
+        if (!panel.classList.contains("visible")) return;
+        if (this._tradeBusy) return;
+        const input = panel.querySelector("#ark-trade-shares");
+        const prevValue = input.value;
+        this._renderTradeForm(action, stockId, fresh);
+        if (prevValue) {
+          // 保留用户已输入的股数
+          input.value = prevValue;
+          this._updateTradeValueHint();
+        }
+        if (statusMessage) {
+          // 回显交易成功提示（重渲染会清空状态行）
+          const statusEl = panel.querySelector("#ark-trade-status");
+          statusEl.textContent = statusMessage;
+          statusEl.className = "ark-trade-status ok";
+        }
+      } catch (e) {
+        console.error("[Ark Stock Monitor] 交易面板数据刷新失败:", e);
+      } finally {
+        this._tradeRefreshBusy = false;
+        const btn = panel.querySelector("#ark-trade-info .ark-refresh-btn");
+        if (btn) btn.classList.remove("loading");
+        // 处理排队中的刷新请求
+        if (this._tradeRefreshQueued) {
+          this._tradeRefreshQueued = false;
+          const queuedMsg = this._tradeRefreshQueuedMsg;
+          this._tradeRefreshQueuedMsg = null;
+          this._refreshTradePanelData(queuedMsg);
+        }
+      }
+    },
+
+    // 打开时快照渲染表单（提交时服务端按实时数据兜底校验）
+    // 传入 fresh（fetchTradePanelData 返回值）时改用实时数据渲染
+    _renderTradeForm(action, stockId, fresh) {
+      const panel = this._tradePanel;
+      if (!panel) return;
+
+      const data = Storage.load();
+      const name = Utils.getModelName(stockId);
+      // 实时数据（fresh.market.stocks 为数组视为有效），否则回退本地快照
+      const useFresh = !!fresh && Array.isArray(fresh.market?.stocks);
+      let price;
+      let pos;
+      let buyFeePct;
+      let sellFeePct;
+      let balance;
+      let marketEnabled;
+      if (useFresh) {
+        const stock = fresh.market.stocks.find((s) => s.id === stockId);
+        price = stock ? stock.priceCents / 100 : null;
+        const rawPos = Array.isArray(fresh.market.positions)
+          ? fresh.market.positions.find((p) => p.stockId === stockId)
+          : null;
+        pos = rawPos
+          ? {
+              shares: rawPos.shares,
+              // 与 DataProcessor.processMarketData 同口径：holdUntil → 秒时间戳
+              locked_until: rawPos.holdUntil
+                ? Math.floor(Date.parse(rawPos.holdUntil) / 1000)
+                : 0,
+            }
+          : null;
+        buyFeePct = fresh.market.rules?.buyFeePct ?? 2;
+        sellFeePct = fresh.market.rules?.sellFeePct ?? 2.5;
+        balance = fresh.balance?.tokens ?? null;
+        marketEnabled = fresh.market.enabled;
+      } else {
+        const priceList = data.priceData?.[stockId];
+        price =
+          priceList && priceList.length
+            ? priceList[priceList.length - 1][1]
+            : null;
+        pos = data.positions?.[stockId] || null;
+        const rules = data.marketRules?.rules || {};
+        buyFeePct = rules.buyFeePct ?? 2;
+        sellFeePct = rules.sellFeePct ?? 2.5;
+        balance = data.userTokens; // 可能为 null（从未拉到余额）
+        marketEnabled = data.marketRules?.enabled;
+      }
+      const nowSec = Math.floor(Date.now() / 1000);
+      const locked = !!pos && pos.locked_until > nowSec;
+      const modelNameMissing = !data.idToModel?.[stockId];
+
+      // 计算最大可买/可卖股数
+      let maxShares = 0;
+      if (action === "buy") {
+        if (price > 0 && balance > 0) {
+          maxShares = Math.floor(
+            balance / (price * (1 + buyFeePct / 100)) - 1e-9,
+          );
+        }
+      } else {
+        maxShares = pos ? pos.shares : 0;
+      }
+
+      this._tradeState = {
+        action,
+        stockId,
+        price,
+        pos,
+        balance,
+        buyFeePct,
+        sellFeePct,
+        locked,
+        maxShares,
+        confirmDisabled: false,
+      };
+
+      // 标题（textContent 赋值，天然免转义）
+      const titleEl = panel.querySelector("#ark-trade-title");
+      titleEl.textContent =
+        action === "buy" ? "买入操作" : "卖出操作";
+
+      // 摘要（纵向排列，textContent 赋值，天然免转义）
+      const infoEl = panel.querySelector("#ark-trade-info");
+      const priceText = price !== null ? price.toFixed(2) : "-";
+      const balanceText =
+        balance !== null ? Utils.formatThousands(balance) : "-";
+      infoEl.textContent = "";
+      const infoRow = (label, value) => {
+        const row = document.createElement("div");
+        row.className = "ark-trade-info-row";
+        const labelEl = document.createElement("span");
+        labelEl.className = "ark-trade-info-label";
+        labelEl.textContent = label;
+        const valueEl = document.createElement("span");
+        valueEl.textContent = value;
+        row.append(labelEl, valueEl);
+        infoEl.appendChild(row);
+      };
+      infoRow("模型", name);
+      infoRow("现价", `${priceText} 代币`);
+      const quickLabel = panel.querySelector("#ark-trade-quick-label");
+      if (quickLabel) {
+        quickLabel.textContent =
+          action === "buy" ? "买入可用代币的：" : "卖出持仓股数的：";
+      }
+      if (action === "buy") {
+        infoRow("可用代币", balanceText);
+        infoRow("买入手续费", `${buyFeePct}%`);
+      } else {
+        infoRow("持仓", pos ? `${pos.shares} 股` : "无持仓");
+        infoRow("卖出手续费", `${sellFeePct}%`);
+      }
+      // 数据时间：发起实时请求的时间（快照渲染时尚未拉取，显示 "-"）
+      const dataTimeRow = document.createElement("div");
+      dataTimeRow.className = "ark-trade-info-row";
+      const dataTimeLabel = document.createElement("span");
+      dataTimeLabel.className = "ark-trade-info-label";
+      dataTimeLabel.textContent = "数据时间";
+      const dataTimeValue = document.createElement("span");
+      dataTimeValue.textContent = useFresh
+        ? TimeUtils.formatDateTime(fresh.requestedAt, "time")
+        : "-";
+      const refreshBtn = document.createElement("button");
+      refreshBtn.className = "ark-refresh-btn";
+      refreshBtn.title = "重新获取数据";
+      refreshBtn.textContent = "↻";
+      // 点击后重新调用数据接口并刷新面板数据（忙时在 _refreshTradePanelData 内排队/丢弃）
+      refreshBtn.addEventListener("click", () => {
+        this._refreshTradePanelData();
+      });
+      dataTimeRow.append(dataTimeLabel, dataTimeValue, refreshBtn);
+      infoEl.appendChild(dataTimeRow);
+
+      // 输入框复位并聚焦
+      const input = panel.querySelector("#ark-trade-shares");
+      input.value = "";
+      input.max = maxShares >= 1 ? maxShares : 1;
+      setTimeout(() => input.focus(), 0);
+
+      // 最大股数提示已移除（快捷按钮仍按 maxShares 计算）
+      const confirmBtn = panel.querySelector("#ark-trade-confirm");
+      const statusEl = panel.querySelector("#ark-trade-status");
+      const lockEl = panel.querySelector("#ark-trade-lock");
+      statusEl.textContent = "";
+      statusEl.className = "ark-trade-status";
+      lockEl.hidden = true;
+      lockEl.textContent = "";
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = action === "buy" ? "确定买入" : "确定卖出";
+      this._tradeBusy = false;
+
+      // 快捷按钮可用性
+      const quickBtns = panel.querySelectorAll("#ark-trade-quick-row button");
+      quickBtns.forEach((b) => (b.disabled = maxShares < 1));
+      this._updateTradeValueHint();
+
+      // 各类禁用场景
+      if (action === "buy") {
+        if (price == null || balance == null || modelNameMissing) {
+          this._tradeState.confirmDisabled = true;
+          confirmBtn.disabled = true;
+          statusEl.textContent = "数据不足，请先刷新";
+          statusEl.className = "ark-trade-status err";
+        } else if (marketEnabled === false) {
+          this._tradeState.confirmDisabled = true;
+          confirmBtn.disabled = true;
+          statusEl.textContent = "休市中，无法交易";
+          statusEl.className = "ark-trade-status err";
+        } else if (maxShares < 1) {
+          this._tradeState.confirmDisabled = true;
+          confirmBtn.disabled = true;
+          statusEl.textContent = "可用代币不足（含手续费）";
+          statusEl.className = "ark-trade-status err";
+        }
+      } else {
+        if (!pos) {
+          this._tradeState.confirmDisabled = true;
+          confirmBtn.disabled = true;
+          statusEl.textContent = "暂无持仓";
+          statusEl.className = "ark-trade-status err";
+        } else if (modelNameMissing) {
+          this._tradeState.confirmDisabled = true;
+          confirmBtn.disabled = true;
+          statusEl.textContent = "数据不足，请先刷新";
+          statusEl.className = "ark-trade-status err";
+        } else if (marketEnabled === false) {
+          this._tradeState.confirmDisabled = true;
+          confirmBtn.disabled = true;
+          statusEl.textContent = "休市中，无法交易";
+          statusEl.className = "ark-trade-status err";
+        } else if (locked) {
+          // 锁定期：提示锁定截止时间，确定按钮不可点击
+          this._tradeState.confirmDisabled = true;
+          confirmBtn.disabled = true;
+          lockEl.hidden = false;
+          lockEl.textContent = `🔒 持仓锁定中，至 ${TimeUtils.formatSecondsTimestamp(pos.locked_until, "full")} 解锁`;
+        } else if (maxShares < 1) {
+          this._tradeState.confirmDisabled = true;
+          confirmBtn.disabled = true;
+          statusEl.textContent = "无持仓可卖出";
+          statusEl.className = "ark-trade-status err";
+        }
+      }
     },
   };
 
@@ -4871,7 +5485,7 @@
         if (!link) return;
         e.preventDefault();
         const stockId = Number(link.getAttribute("data-stock-id"));
-        UIRenderers.showColorMenu(e, stockId, Storage.load());
+        UIRenderers.showTradeContextMenu(e, stockId, Storage.load());
       });
     },
 
@@ -5044,84 +5658,173 @@
       return null;
     },
 
-    showColorMenu(e, stockId, data) {
-      // 移除现有的颜色菜单
-      const existingMenu = document.querySelector(".ark-color-menu");
-      if (existingMenu) {
-        existingMenu.remove();
+    // 关闭右键交易菜单（一级 + 颜色标识二级浮层），统一清理 document 级监听
+    _closeTradeMenu() {
+      if (this._tradeMenuClose) {
+        this._tradeMenuClose();
+        this._tradeMenuClose = null;
       }
+    },
 
-      // 创建菜单容器
+    // 表头模型名称右键菜单：买入 / 卖出 / 颜色标识（独立二级浮层）
+    showTradeContextMenu(e, stockId, data) {
+      // 右击已有菜单：先关旧的，再在新位置重建
+      this._closeTradeMenu();
+
+      const hasPosition = !!data.positions?.[stockId];
+
+      // 一级菜单容器（复用 .ark-color-menu 外壳样式）
       const menu = document.createElement("div");
-      menu.className = "ark-color-menu";
+      menu.className = "ark-color-menu ark-trade-menu";
+      menu.innerHTML = `
+        <div class="ark-menu-item" data-action="buy"><span>买入</span></div>
+        <div class="ark-menu-item${hasPosition ? "" : " ark-menu-item-disabled"}" data-action="sell"><span>卖出</span></div>
+        <div class="ark-menu-item" data-action="colors"><span>颜色标识</span><span class="ark-menu-arrow">▸</span></div>
+      `;
+      document.body.appendChild(menu);
+      this._clampMenuToViewport(menu, e.pageX, e.pageY);
 
-      // 设置菜单位置
-      menu.style.left = e.pageX + "px";
-      menu.style.top = e.pageY + "px";
+      let submenu = null;
+      const closeSubmenu = () => {
+        if (submenu) {
+          submenu.remove();
+          submenu = null;
+        }
+      };
 
-      // 获取当前颜色
+      const controller = new AbortController();
+      const closeMenu = () => {
+        controller.abort();
+        closeSubmenu();
+        menu.remove();
+      };
+      this._tradeMenuClose = closeMenu;
+
+      // 一级菜单点击：买入/卖出 → 关菜单开面板；颜色标识 → 切换二级浮层
+      menu.addEventListener("click", (ev) => {
+        const item = ev.target.closest(".ark-menu-item");
+        if (!item || item.classList.contains("ark-menu-item-disabled")) return;
+        const action = item.dataset.action;
+        if (action === "colors") {
+          if (submenu) {
+            closeSubmenu();
+          } else {
+            submenu = this._buildColorSubmenu(menu, stockId, data, closeMenu);
+          }
+          return;
+        }
+        closeMenu();
+        UIPanels.openTradePanel(action, stockId);
+      });
+
+      // 外点 click / 右击其他位置 / Esc 统一关闭（AbortController 一次性清理）
+      setTimeout(() => {
+        if (controller.signal.aborted) return;
+        document.addEventListener(
+          "click",
+          (ev) => {
+            if (
+              !menu.contains(ev.target) &&
+              !(submenu && submenu.contains(ev.target))
+            ) {
+              closeMenu();
+            }
+          },
+          { signal: controller.signal },
+        );
+        document.addEventListener(
+          "contextmenu",
+          (ev) => {
+            if (
+              !menu.contains(ev.target) &&
+              !(submenu && submenu.contains(ev.target))
+            ) {
+              closeMenu();
+            }
+          },
+          { signal: controller.signal },
+        );
+        document.addEventListener(
+          "keydown",
+          (ev) => {
+            if (ev.key === "Escape") closeMenu();
+          },
+          { signal: controller.signal },
+        );
+      }, 0);
+    },
+
+    // 颜色标识二级浮层：在一级菜单右侧弹出，复用旧颜色菜单的结构与保存逻辑
+    _buildColorSubmenu(anchorMenu, stockId, data, closeAll) {
       const currentColor = data.modelColors?.[stockId];
-      const hasPosition = data.positions?.[stockId];
 
-      // 构建菜单内容
-      let menuHtml = '<div class="ark-color-menu-title">选择颜色</div>';
-      menuHtml += '<div class="ark-color-options">';
+      const submenu = document.createElement("div");
+      submenu.className = "ark-color-menu ark-color-submenu";
 
-      // 显示可用颜色选项
+      let html = '<div class="ark-color-menu-title">选择颜色</div>';
+      html += '<div class="ark-color-options">';
       for (const color of CONFIG.MODEL_COLORS) {
-        // 如果已经有颜色且不等于当前颜色，显示所有颜色
-        // 如果还没有颜色，显示所有6种颜色
         if (!currentColor || color.value !== currentColor) {
-          menuHtml += `
+          html += `
             <div class="ark-color-option" data-color="${color.value}">
               <div class="ark-color-swatch" style="background-color: ${color.value}"></div>
             </div>
           `;
         }
       }
-
-      menuHtml += "</div>";
-
-      // 如果已经有颜色，显示"取消标识"按钮
+      html += "</div>";
       if (currentColor) {
-        menuHtml += '<button class="ark-color-remove">移除颜色</button>';
+        html += '<button class="ark-color-remove">移除颜色</button>';
       }
+      submenu.innerHTML = html;
 
-      menu.innerHTML = menuHtml;
+      document.body.appendChild(submenu);
 
-      // 添加到页面
-      document.body.appendChild(menu);
+      // 定位到一级菜单右侧，垂直方向与其顶部对齐（absolute 需页面坐标，加上滚动偏移）
+      const rect = anchorMenu.getBoundingClientRect();
+      const left = rect.right + window.scrollX + 4;
+      const top = rect.top + window.scrollY;
+      submenu.style.left = left + "px";
+      submenu.style.top = top + "px";
+      this._clampMenuToViewport(submenu, left, top);
 
-      // 添加颜色选择事件
-      menu.querySelectorAll(".ark-color-option").forEach((option) => {
+      // 选色 / 移除颜色：走既有保存逻辑，然后关闭全部菜单
+      submenu.querySelectorAll(".ark-color-option").forEach((option) => {
         option.addEventListener("click", () => {
-          const color = option.getAttribute("data-color");
-          UIRenderers.setModelColor(stockId, color, data);
-          menu.remove();
+          UIRenderers.setModelColor(
+            stockId,
+            option.getAttribute("data-color"),
+            data,
+          );
+          closeAll();
         });
       });
-
-      // 添加取消标识事件
-      const removeBtn = menu.querySelector(".ark-color-remove");
+      const removeBtn = submenu.querySelector(".ark-color-remove");
       if (removeBtn) {
         removeBtn.addEventListener("click", () => {
           UIRenderers.removeModelColor(stockId, data);
-          menu.remove();
+          closeAll();
         });
       }
 
-      // 点击外部关闭菜单
-      const closeMenu = (event) => {
-        if (!menu.contains(event.target)) {
-          menu.remove();
-          document.removeEventListener("click", closeMenu);
-        }
-      };
+      return submenu;
+    },
 
-      // 使用 setTimeout 避免立即触发关闭
-      setTimeout(() => {
-        document.addEventListener("click", closeMenu);
-      }, 0);
+    // 防止菜单溢出视口：超出右/下边缘时向内回拉 8px
+    _clampMenuToViewport(menu, pageX, pageY) {
+      menu.style.left = pageX + "px";
+      menu.style.top = pageY + "px";
+      const rect = menu.getBoundingClientRect();
+      const margin = 8;
+      if (rect.right > window.innerWidth - margin) {
+        menu.style.left =
+          pageX - (rect.right - window.innerWidth + margin) + "px";
+      }
+      if (rect.bottom > window.innerHeight - margin) {
+        const currentTop = rect.top + window.scrollY;
+        menu.style.top =
+          currentTop - (rect.bottom - window.innerHeight + margin) + "px";
+      }
     },
 
     setModelColor(stockId, color, data) {

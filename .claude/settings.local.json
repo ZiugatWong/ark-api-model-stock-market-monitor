@@ -1,5 +1,4 @@
 {
-  "plansDirectory": "./plans",
   "permissions": {
     "allow": [
       "Bash(node *)",
@@ -9,7 +8,9 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:www.tradingview.com)",
-      "Bash(gh api *)"
+      "Bash(gh api *)",
+      "Bash(node --check *)"
     ]
-  }
+  },
+  "plansDirectory": "./plans"
 }

@@ -13,30 +13,31 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 - 多图表系统：Lightweight Charts 实现，支持价格线（今日高/低、持仓成本线）、拖拽调整大小
 - 通知系统：价格突破提醒（弹窗、声音、Telegram、Bark iOS）
 - 活跃套利榜：24 小时价格波动排行（单一实时榜）
+- 买入/卖出交易：行情右键菜单一键下单，前端实时校验（余额/持仓/手续费/休市/锁定）
 - 市场状态：展示开闭市、买卖手续费、持仓时长
 - 数据维护：自动清理旧数据（可配置保留天数）
 - 数据持久化：通过 GM_setValue/GM_getValue 实现，含旧版数据迁移
 
 ## 架构
 
-**单文件脚本** `ark-game-stock-monitor.user.js` (~5562 行)，模块化组织：
+**单文件脚本** `ark-game-stock-monitor.user.js` (~6350 行)，模块化组织：
 1. 配置 (行 24-38) - CONFIG（含 STORAGE_KEY）
 2. 数据结构 (行 39-80) - DEFAULT_DATA（主键为 stockId）
-3. 存储 (行 81-245) - Storage（GM_setValue/GM_getValue/GM_deleteValue + 旧数据迁移 migrateFromLegacy）
-4. 主题 (行 246-324) - Theme（主题切换和应用）
-5. 工具函数 (行 325-447) - Utils（含 getModelName 反查）、TimeUtils
-6. API (行 457-570) - 市场数据 /api/stock、余额 /api/me/balance、模型列表
-7. 数据处理 (行 571-799) - DataProcessor（价格变化检测、持仓派生、套利榜、通知检查）
-8. 通知 (行 800-1036) - Notification（弹窗、声音、Telegram、Bark 推送）
-9. 定时任务 (行 1037-1083) - Scheduler（分钟尾数触发器）
-10. 样式 (行 1084-2443) - Styles（CSS 注入）
-11. 图表 (行 2444-2765) - Chart（图表工具函数）
-12. 图表管理 (行 2766-3290) - ChartManager, MultiPanelManagerClass
-13. UI 面板工厂 (行 3291-4535) - UIPanels（面板创建）
-14. UI 渲染器 (行 4536-5272) - UIRenderers（表格和数据渲染）
-15. 交互 (行 5273-5451) - Interactions（拖拽和调整大小）
-16. 业务入口 (行 5452-5523) - App（doFetch 主流程）
-17. 启动 (行 5524-5562) - 初始化、迁移触发、菜单注册
+3. 存储 (行 81-248) - Storage（GM_setValue/GM_getValue/GM_deleteValue + 旧数据迁移 migrateFromLegacy）
+4. 主题 (行 249-327) - Theme（主题切换和应用）
+5. 工具函数 (行 328-479) - Utils（含 getModelName 反查）、TimeUtils
+6. API (行 480-636) - 市场数据 GET /api/stock、买入卖出 POST /api/stock、余额 /api/me/balance、模型列表
+7. 数据处理 (行 637-901) - DataProcessor（价格变化检测、持仓派生、套利榜、通知检查）
+8. 通知 (行 902-1138) - Notification（弹窗、声音、Telegram、Bark 推送）
+9. 定时任务 (行 1139-1185) - Scheduler（分钟尾数触发器）
+10. 样式 (行 1186-2609) - Styles（CSS 注入）
+11. 图表 (行 2610-2996) - Chart（图表工具函数）
+12. 图表管理 (行 2997-3521) - ChartManager, MultiPanelManagerClass
+13. UI 面板工厂 (行 3522-5231) - UIPanels（面板创建，含买入/卖出交易面板 行 4771-5231）
+14. UI 渲染器 (行 5232-6059) - UIRenderers（表格和数据渲染）
+15. 交互 (行 6060-6238) - Interactions（拖拽和调整大小）
+16. 业务入口 (行 6239-6310) - App（doFetch 主流程）
+17. 启动 (行 6311-6350) - 初始化、迁移触发、菜单注册
 
 **关键数据结构（主键均为 stockId）：**
 - `stockIds` - 监控的 stockId 数组
@@ -52,7 +53,9 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 ## 核心实现
 
 - **认证**：同源 cookie 鉴权（`ptd_session`），`fetch` + `credentials: "include"`，无请求头鉴权
-- **API**：`window.location.origin` + `/api/stock`（行情）、`/api/me/balance`（代币）
+- **API**：`window.location.origin` + `GET /api/stock`（行情）、`POST /api/stock`（买入/卖出）、`/api/me/balance`（代币）
+- **买入/卖出**：右键模型名打开一级菜单（买入/卖出/颜色标识），`UIPanels.openTradePanel` 打开单例交易面板；前端按实时行情+余额校验（手续费、休市、持仓锁定、股数范围），提交走 `API.submitTrade`（POST /api/stock，`idempotencyKey` 幂等）
+- **右键菜单**：`UIRenderers.showTradeContextMenu` 取代原 `showColorMenu`，卖出生效项需有持仓，颜色标识下沉为二级浮层（`_buildColorSubmenu`）
 - **主键策略**：全部用 stockId 串联，展示模型名时通过 `idToModel` 查表（规避模型改名/重名风险）
 - **价格历史时间戳**：stale=false（活跃）模型，取 ticks 前 n 条按 stockId 匹配的 createdAt（秒）
 - **stale 语义**：`stale === false` 表示数据新鲜/活跃（本轮有 tick）；`stale === true` 表示数据陈旧（无 tick）
