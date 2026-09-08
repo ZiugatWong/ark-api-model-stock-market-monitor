@@ -19,7 +19,7 @@ Ark API 模型股票数据服务 - 独立的后端服务，提供价格数据的
 - **Node.js 20+** - 运行时
 - **Express** - HTTP 框架
 - **ioredis** - Redis 客户端
-- **node-cron** - 定时任务
+- **cron** - 定时任务
 - **express-rate-limit + rate-limit-redis** - 基于 Redis 的分布式限流
 - **axios** - HTTP 请求
 - **dotenv** - 环境变量管理
@@ -152,7 +152,7 @@ docker compose down -v
 | `ARK_GAME_API_TIMEOUT`      | API 请求超时（毫秒） | `15000`                                  |
 | `ARK_GAME_API_RETRIES`      | API 请求重试次数     | `3`                                      |
 | `ARK_GAME_API_RETRY_DELAY`  | 重试间隔（毫秒）     | `2000`                                   |
-| `SYNC_CRON`                 | 同步任务 Cron 表达式 | `*/5 * * * *`（每5分钟）                 |
+| `SYNC_CRON`                 | 同步任务 Cron 表达式 | `1/5 * * * *`（每5分钟）                 |
 | `REDIS_URL`                 | Redis 连接 URL       | `redis://ark-api-model-stock-redis:6379` |
 | `RATE_LIMIT_WINDOW_SECONDS` | 限流窗口（秒）       | `60`                                     |
 | `RATE_LIMIT_MAX`            | 窗口内最大请求数     | `2`                                      |
@@ -326,6 +326,9 @@ stock-data-service/
 │   ├── config/
 │   │   ├── env.js              # 环境变量配置
 │   │   └── redis.js            # Redis 连接
+│   ├── constants/
+│   │   ├── business.js         # 业务常量（数据保留期、缓存 TTL）
+│   │   └── redisKeys.js        # Redis 键名常量
 │   ├── services/
 │   │   ├── arkGameApi.js       # Ark Game API 封装
 │   │   ├── priceStorage.js     # 价格数据存储
@@ -335,6 +338,10 @@ stock-data-service/
 │   │   └── rateLimit.js        # 限流中间件
 │   ├── routes/
 │   │   └── api.js              # HTTP 路由
+│   ├── utils/
+│   │   ├── logger.js           # 日志工具
+│   │   ├── responseHelper.js   # API 响应助手
+│   │   └── timeUtils.js        # 时间工具
 │   └── app.js                  # 应用入口
 ├── Dockerfile
 ├── docker-compose.yml
