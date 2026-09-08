@@ -63,6 +63,8 @@
     arbitrageData: [],
     // 键为 stockId
     positions: {},
+    // 交易历史（键为 stockId，仅记录通过本脚本成功买入/卖出的记录）
+    tradeHistory: {},
     modelColors: {},
     priceDataDaysLimit: 7,
     lastPriceDataCleanDate: null,
@@ -113,6 +115,7 @@
           notifications: d.notifications || {},
           arbitrageData: d.arbitrageData || [],
           positions: d.positions || {},
+          tradeHistory: d.tradeHistory || {},
           modelColors: d.modelColors || {},
           priceDataDaysLimit: d.priceDataDaysLimit || 7,
           lastPriceDataCleanDate: d.lastPriceDataCleanDate || null,
@@ -897,6 +900,40 @@
         Notification.sendBatch(triggered);
       }
     },
+
+    // 记录一次通过本脚本成功买/卖的交易（仅本地保存，接口不提供交易历史）
+    // 记录字段沿用旧版 windhub 脚本：{ id, side, shares, price, gross, fee, net, created_at }
+    // 主键策略：tradeHistory 以 stockId 为键（见模块头注释），展示模型名时经 idToModel 查表
+    recordTrade({ id, side, stockId, shares, price, feePct }) {
+      if (!stockId || !shares || price == null) return;
+      const gross = shares * price; // 成交额（代币）
+      const fee = gross * (feePct / 100); // 手续费（代币）
+      // net 为带符号的余额变化：买入支付本金+手续费为负，卖出收入本金-手续费为正
+      const net = side === "buy" ? -(gross + fee) : gross - fee;
+      const record = {
+        id:
+          id != null
+            ? id
+            : `trade:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`,
+        side, // "buy" | "sell"
+        shares,
+        price,
+        gross,
+        fee,
+        net,
+        created_at: Math.floor(Date.now() / 1000),
+      };
+
+      const data = Storage.load();
+      const list = data.tradeHistory || {};
+      const existing = list[stockId] || [];
+      // 按 id 去重（幂等重放可能返回同一 tradeId，避免重复记录）
+      if (existing.some((t) => t.id === record.id)) return; // 已存在，仅防御；正常只写一次
+      list[stockId] = [...existing, record].sort((a, b) => a.id - b.id);
+      data.tradeHistory = list;
+      Storage.save(data);
+      return record;
+    },
   };
 
   // ==================== 通知 ====================
@@ -1610,6 +1647,96 @@
     .ark-arbitrage-table .price-low { color: #F55454; }
     .ark-arbitrage-table .price-high { color: #00A854; }
 
+    #ark-trades-panel {
+      position: fixed;
+      top: 60px;
+      right: 540px;
+      width: max-content;
+      max-width: 900px;
+      min-width: 600px;
+      max-height: 80vh;
+      background: #1a1a1a;
+      color: #f0f0f0;
+      border: 1px solid #333;
+      border-radius: 10px;
+      z-index: 1998;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #ark-trades-panel.visible { display: flex; }
+    #ark-trades-panel .panel-body {
+      padding: 6px 10px;
+      overflow-y: auto;
+      flex: 1;
+      background: #1a1a1a;
+      border-radius: 0 0 10px 10px;
+    }
+    .ark-trades-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .ark-trades-model-select {
+      background: #2a2a2a;
+      color: #f0f0f0;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      min-width: 240px;
+    }
+    .ark-trades-model-select:focus {
+      outline: none;
+      border-color: #89b4fa;
+    }
+    .ark-trades-count {
+      color: var(--ark-label);
+      font-size: 12px;
+    }
+    .ark-trades-note {
+      color: var(--ark-muted);
+      font-size: 11px;
+      margin-bottom: 8px;
+    }
+    .ark-trades-table-wrap {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .ark-trades-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .ark-trades-table th {
+      background: #2a2a2a;
+      padding: 8px 10px;
+      text-align: center;
+      font-weight: 600;
+      color: var(--ark-label);
+      border-bottom: 1px solid #444;
+      position: sticky;
+      top: 0;
+    }
+    .ark-trades-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #333;
+      text-align: center;
+    }
+    .ark-trades-table tr:nth-child(even) td {
+      background: #222;
+    }
+    .ark-trades-table tr:hover td {
+      background: #2a2a2a;
+    }
+    .ark-trades-table td.side-buy { color: #F55454; }
+    .ark-trades-table td.side-sell { color: #00A854; }
+
     .ark-market-entrance {
       display: flex;
       justify-content: center;
@@ -2154,57 +2281,6 @@
       border: 1px solid #ff6b6b;
     }
 
-    .ark-trades-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-    }
-    .ark-trades-table th, .ark-trades-table td {
-      padding: 5px 8px;
-      border: 1px solid #333;
-      text-align: center;
-      white-space: nowrap;
-    }
-    .ark-trades-table th {
-      background: #222;
-      color: #f0f0f0;
-      font-weight: 600;
-      position: sticky;
-      top: 0;
-    }
-    .ark-trades-table td.side-buy { color: #F55454; }
-    .ark-trades-table td.side-sell { color: #00A854; }
-
-    .ark-trades-controls {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      margin-bottom: 12px;
-    }
-    .ark-trades-model-select {
-      flex: 1;
-      padding: 6px 10px;
-      border-radius: 6px;
-      border: 1px solid #444;
-      background: #2a2a2a;
-      color: #f0f0f0;
-      font-size: 13px;
-      outline: none;
-    }
-    .ark-trades-model-select:focus { border-color: #89b4fa; }
-    .ark-trades-refresh-btn {
-      padding: 6px 14px;
-      border-radius: 5px;
-      border: none;
-      background: #89b4fa;
-      color: #1e1e2e;
-      font-weight: 600;
-      cursor: pointer;
-      font-size: 12px;
-    }
-    .ark-trades-refresh-btn:hover { background: #b4befe; }
-    .ark-trades-refresh-btn:disabled { background: #555; cursor: not-allowed; }
-
     /* 刷新按钮样式 */
     .ark-refresh-btn {
       background: none;
@@ -2273,6 +2349,7 @@
     body.ark-theme-light #ark-trade-panel,
     body.ark-theme-light #ark-positions-panel,
     body.ark-theme-light #ark-arbitrage-panel,
+    body.ark-theme-light #ark-trades-panel,
     body.ark-theme-light .ark-chart-panel {
       background: var(--ark-surface);
       color: var(--ark-text);
@@ -2317,7 +2394,8 @@
     body.ark-theme-light #ark-price-panel .panel-body,
     body.ark-theme-light #ark-trade-panel .panel-body,
     body.ark-theme-light #ark-positions-panel .panel-body,
-    body.ark-theme-light #ark-arbitrage-panel .panel-body {
+    body.ark-theme-light #ark-arbitrage-panel .panel-body,
+    body.ark-theme-light #ark-trades-panel .panel-body {
       background: var(--ark-surface);
     }
 
@@ -2395,6 +2473,12 @@
     body.ark-theme-light .ark-arbitrage-table tr:hover td {
       background: var(--ark-chip);
     }
+    body.ark-theme-light .ark-trades-table tr:nth-child(even) td {
+      background: var(--ark-elevated);
+    }
+    body.ark-theme-light .ark-trades-table tr:hover td {
+      background: var(--ark-chip);
+    }
 
     /* 表单：输入框 / 下拉框 */
     body.ark-theme-light .ark-minute-input,
@@ -2434,9 +2518,6 @@
     body.ark-theme-light .ark-model-clear-btn:hover,
     body.ark-theme-light .ark-model-error button:hover {
       background: var(--ark-btn-2-hover);
-    }
-    body.ark-theme-light .ark-trades-refresh-btn:disabled {
-      background: var(--ark-btn-2);
     }
 
     /* 开关关闭态 */
@@ -3569,6 +3650,7 @@
     _tradeState: null, // 交易面板打开时的数据快照
     _positionsPanel: null,
     _arbitragePanel: null,
+    _tradesPanel: null, // 交易记录面板（本地交易历史，单例）
     _dataMaintenancePanel: null,
     _currentZIndex: 2000, // 动态 z-index 起始值，每次打开面板时递增
 
@@ -3631,6 +3713,7 @@
               <a href="javascript:void(0)" class="ark-latest-price-link" id="ark-latest-price-btn">最新价格</a>
               <a href="javascript:void(0)" class="ark-arbitrage-link" id="ark-arbitrage-btn">活跃套利榜</a>
               <a href="javascript:void(0)" class="ark-positions-link" id="ark-positions-btn">我的持仓</a>
+              <a href="javascript:void(0)" class="ark-positions-link" id="ark-trades-btn">交易记录</a>
             </div>
           </div>
           <div class="ark-section">
@@ -3716,6 +3799,12 @@
           UIPanels.bringToFront(UIPanels._positionsPanel);
           const data = Storage.load();
           UIRenderers.refreshPositionsPanel(data);
+        });
+
+      this._mainPanel
+        .querySelector("#ark-trades-btn")
+        .addEventListener("click", () => {
+          UIPanels.openTradesHistoryPanel();
         });
 
       this._mainPanel
@@ -4805,6 +4894,73 @@
       return this._arbitragePanel;
     },
 
+    // ==================== 交易记录面板 ====================
+
+    // 打开交易记录面板（懒创建单例），渲染前先从本地数据刷新下拉与表格
+    openTradesHistoryPanel() {
+      if (!this._tradesPanel) {
+        this._tradesPanel = this.createTradesPanel();
+      }
+      this._tradesPanel.classList.add("visible");
+      this.bringToFront(this._tradesPanel);
+      UIRenderers.refreshTradesPanel();
+    },
+
+    createTradesPanel() {
+      if (this._tradesPanel) return this._tradesPanel;
+
+      const data = Storage.load();
+      this._tradesPanel = document.createElement("div");
+      this._tradesPanel.id = "ark-trades-panel";
+
+      this._tradesPanel.innerHTML = `
+        <div class="ark-panel-header">
+          <div class="header-left">
+            <span class="title">交易记录</span>
+          </div>
+          <div class="header-right">
+            <button class="close-btn" title="关闭">&times;</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="ark-section">
+            <div class="ark-trades-note">注意：由于站点无交易查询接口，故仅记录通过本脚本完成的交易</div>
+            <div class="ark-trades-controls">选择模型：
+              <select class="ark-trades-model-select" id="ark-trades-model-select">
+                <option value="">全部</option>
+              </select>
+              <span class="ark-trades-count" id="ark-trades-count"></span>
+            </div>
+            <div class="ark-table-wrap" id="ark-trades-table-wrap">
+              <div class="ark-empty-hint">暂无交易记录</div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(this._tradesPanel);
+      Interactions.initDrag(
+        this._tradesPanel,
+        this._tradesPanel.querySelector(".ark-panel-header"),
+      );
+
+      this._tradesPanel
+        .querySelector(".close-btn")
+        .addEventListener("click", () => {
+          this._tradesPanel.classList.remove("visible");
+        });
+
+      this._tradesPanel
+        .querySelector("#ark-trades-model-select")
+        .addEventListener("change", () => {
+          UIRenderers.renderTradesTable(
+            this._tradesPanel.querySelector("#ark-trades-model-select").value,
+          );
+        });
+
+      return this._tradesPanel;
+    },
+
     // ==================== 买入/卖出交易面板 ====================
 
     // 打开交易面板（单例复用，按 action 重渲染表单区）
@@ -4920,10 +5076,21 @@
           statusEl.className = "ark-trade-status";
 
           try {
-            await API.submitTrade({
+            const body = await API.submitTrade({
               action: state.action,
               stockId: state.stockId,
               shares,
+            });
+
+            // 交易成功：落库一条本地交易记录（接口不提供交易历史，仅供本脚本展示）
+            DataProcessor.recordTrade({
+              id: body?.tradeId,
+              side: state.action,
+              stockId: state.stockId,
+              shares,
+              price: state.price,
+              feePct:
+                state.action === "buy" ? state.buyFeePct : state.sellFeePct,
             });
 
             statusEl.textContent = `✓ ${state.action === "buy" ? "买入" : "卖出"} ${shares} 股成功`;
@@ -6092,6 +6259,110 @@
       el.textContent = timestamp
         ? TimeUtils.formatDateTime(timestamp, "full")
         : "从未更新";
+    },
+
+    // ==================== 交易记录渲染 ====================
+
+    // 填充交易记录面板的模型下拉框（含"全部"项），保留当前选中值
+    populateTradesModelSelect() {
+      const panel = UIPanels._tradesPanel;
+      if (!panel) return;
+      const select = panel.querySelector("#ark-trades-model-select");
+      if (!select) return;
+      const data = Storage.load();
+      const current = select.value;
+      const stockIds = Object.keys(data.tradeHistory || {}).filter(
+        (sid) => (data.tradeHistory[sid] || []).length > 0,
+      );
+      // 按模型名排序，展示更稳定
+      stockIds.sort((a, b) =>
+        (data.idToModel[a] || "").localeCompare(data.idToModel[b] || ""),
+      );
+      select.innerHTML = [
+        '<option value="">全部</option>',
+        ...stockIds.map(
+          (sid) =>
+            `<option value="${Utils.escapeHtml(sid)}">${Utils.escapeHtml(
+              data.idToModel[sid] || Utils.getModelName(sid),
+            )}</option>`,
+        ),
+      ].join("");
+      // 选中值仍有效则保留，否则回退"全部"
+      if (current && stockIds.includes(current)) select.value = current;
+      else select.value = "";
+    },
+
+    // 渲染交易记录表格；modelKey 为 "" 时展示全部模型的记录
+    renderTradesTable(modelKey) {
+      const wrap = document.querySelector("#ark-trades-table-wrap");
+      if (!wrap) return;
+      const data = Storage.load();
+      const history = data.tradeHistory || {};
+
+      let trades = [];
+      if (modelKey) {
+        trades = history[modelKey] || [];
+      } else {
+        for (const sid of Object.keys(history)) {
+          for (const t of history[sid])
+            trades.push({ ...t, stockId: t.stockId || sid });
+        }
+      }
+      // 后端/旧数据可能未存 stockId 到记录内，用"全部"视图按当前 key 补齐
+      if (modelKey) {
+        trades = trades.map((t) => ({ ...t, stockId: t.stockId || modelKey }));
+      }
+
+      if (trades.length === 0) {
+        wrap.innerHTML = '<div class="ark-empty-hint">暂无交易记录</div>';
+        return;
+      }
+
+      // 按成交时间倒序（最新在前）
+      trades.sort((a, b) => b.created_at - a.created_at);
+
+      let html = `<table class="ark-trades-table">
+        <thead><tr><th>交易时间</th><th>模型</th><th>买卖方向</th><th>价格</th><th>股数</th><th>成交额</th><th>手续费</th><th>余额变化</th></tr></thead><tbody>`;
+
+      for (const t of trades) {
+        const timeStr = TimeUtils.formatSecondsTimestamp(t.created_at, "short");
+        const modelName =
+          (t.stockId != null && data.idToModel[t.stockId]) || "未知模型";
+        const sideDisplay = t.side === "buy" ? "买入" : "卖出";
+        const grossAmount = t.gross.toFixed(2);
+        const feeAmount = t.fee.toFixed(2);
+        const balanceChangeSign = t.side === "buy" ? "-" : "+";
+        const balanceChange = balanceChangeSign + Math.abs(t.net).toFixed(2);
+
+        html += `<tr>
+          <td>${timeStr}</td>
+          <td>${Utils.escapeHtml(modelName)}</td>
+          <td class="side-${t.side}">${sideDisplay}</td>
+          <td>${t.price.toFixed(2)}</td>
+          <td>${t.shares}</td>
+          <td>${grossAmount}</td>
+          <td>${feeAmount}</td>
+          <td class="side-${t.side}">${balanceChange}</td>
+        </tr>`;
+      }
+      html += "</tbody></table>";
+      wrap.innerHTML = html;
+    },
+
+    // 整体刷新交易记录面板：下拉 + 表格 + 总数统计
+    refreshTradesPanel() {
+      const panel = UIPanels._tradesPanel;
+      if (!panel) return;
+      const data = Storage.load();
+      const history = data.tradeHistory || {};
+      let total = 0;
+      for (const sid of Object.keys(history))
+        total += (history[sid] || []).length;
+      const countEl = panel.querySelector("#ark-trades-count");
+      if (countEl) countEl.textContent = `共 ${total} 条`;
+      this.populateTradesModelSelect();
+      const select = panel.querySelector("#ark-trades-model-select");
+      this.renderTradesTable(select ? select.value : "");
     },
   };
 
