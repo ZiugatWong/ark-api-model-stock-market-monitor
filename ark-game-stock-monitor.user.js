@@ -3013,8 +3013,8 @@
       const errorEl = document.createElement("div");
       errorEl.style.cssText = `
         position: fixed;
-        top: 100px;
-        right: 20px;
+        top: 10px;
+        right: 10px;
         padding: 10px 16px;
         background: #ff6b6b;
         color: white;
