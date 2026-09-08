@@ -3197,7 +3197,20 @@
         priceLines = { highLine, lowLine, positionLine };
       }
 
-      // 交易标记已移除（新站点无交易历史接口）
+      // 交易标记：把通过本脚本买入/卖出的记录作为买卖点标注在图表上
+      const tradeHistory = data.tradeHistory?.[stockId];
+      if (tradeHistory && tradeHistory.length > 0 && chartData.length > 0) {
+        const minTime = chartData[0].time;
+        const filteredTrades = tradeHistory.filter(
+          (t) => t.created_at >= minTime,
+        );
+        if (filteredTrades.length > 0) {
+          const markers = Chart.convertToMarkers(filteredTrades, chartData);
+          if (markers.length > 0) {
+            series.setMarkers(markers);
+          }
+        }
+      }
 
       return { stats, priceLines };
     }
@@ -3280,12 +3293,16 @@
         const chartData = Chart.convertToChartData(modelData);
         if (chartData.length === 0) throw new Error("数据转换失败");
 
+        // 将交易价格作为数据点补入 chartData，保证买卖点标记垂直位置准确
+        const trades = data.tradeHistory?.[stockId] || [];
+        const enrichedChartData = Chart.enrichWithTradePrices(chartData, trades);
+
         const chart = await Chart.createThemedChart(container);
-        const series = Chart.createPriceLineSeries(chart, chartData);
+        const series = Chart.createPriceLineSeries(chart, enrichedChartData);
 
         const { stats, priceLines } = this._updateChartSeriesData(
           series,
-          chartData,
+          enrichedChartData,
           stockId,
           data,
           true, // 默认显示标签
@@ -3303,7 +3320,7 @@
         this.setChartInstance(panelId, chartId, {
           chart,
           series,
-          chartData: chartData,
+          chartData: enrichedChartData,
           priceLines,
         });
 
@@ -3317,8 +3334,8 @@
           });
         }
 
-        if (chartData.length > 1) {
-          const lastTime = chartData[chartData.length - 1].time;
+        if (enrichedChartData.length > 1) {
+          const lastTime = enrichedChartData[enrichedChartData.length - 1].time;
           chart.timeScale().setVisibleRange({
             from: getYesterdayMorningTimestamp(),
             to: lastTime,
@@ -3527,8 +3544,12 @@
         const chartData = Chart.convertToChartData(modelData);
         if (chartData.length === 0) throw new Error("数据转换失败");
 
-        instance.series.setData(chartData);
-        instance.chartData = chartData;
+        // 将交易价格作为数据点补入 chartData，保证买卖点标记垂直位置准确
+        const trades = data.tradeHistory?.[panelInfo.stockId] || [];
+        const enrichedChartData = Chart.enrichWithTradePrices(chartData, trades);
+
+        instance.series.setData(enrichedChartData);
+        instance.chartData = enrichedChartData;
 
         if (instance.priceLines) {
           if (instance.priceLines.highLine) {
@@ -3550,7 +3571,7 @@
 
         const { stats, priceLines } = this._updateChartSeriesData(
           instance.series,
-          chartData,
+          enrichedChartData,
           panelInfo.stockId,
           data,
           showLabels,
@@ -3571,8 +3592,8 @@
           }
         }
 
-        if (chartData.length > 1) {
-          const lastTime = chartData[chartData.length - 1].time;
+        if (enrichedChartData.length > 1) {
+          const lastTime = enrichedChartData[enrichedChartData.length - 1].time;
           instance.chart.timeScale().setVisibleRange({
             from: getYesterdayMorningTimestamp(),
             to: lastTime,
@@ -6274,9 +6295,9 @@
       const stockIds = Object.keys(data.tradeHistory || {}).filter(
         (sid) => (data.tradeHistory[sid] || []).length > 0,
       );
-      // 按模型名排序，展示更稳定
+      // 按模型名排序，展示更稳定（显式英文区域，确保任何语言环境下都按英文字母序）
       stockIds.sort((a, b) =>
-        (data.idToModel[a] || "").localeCompare(data.idToModel[b] || ""),
+        (data.idToModel[a] || "").localeCompare(data.idToModel[b] || "", "en"),
       );
       select.innerHTML = [
         '<option value="">全部</option>',
