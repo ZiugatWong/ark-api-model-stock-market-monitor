@@ -2,7 +2,7 @@
 // @name         Ark API 模型股市监控
 // @description  Ark 模型股市数据聚合分析与价格变动通知（game.arkengine.me）
 // @namespace    http://tampermonkey.net/
-// @version      1.0.8
+// @version      1.0.9
 // @author       ziugat
 // @license      GPL-3.0
 // @homepage     https://github.com/ZiugatWong/ark-api-model-stock-market-monitor
@@ -807,23 +807,19 @@
     processArbitrageData(response) {
       if (!response || !Array.isArray(response.stocks)) return [];
 
-      // 用 stale=false 过滤活跃（新鲜）模型；元素含 stockId + model_name（展示用冗余）
-      const list = response.stocks
-        .filter((s) => s.stale === false)
-        .map((s) => {
-          const high = s.high24hCents / 100;
-          const low = s.low24hCents / 100;
-          return {
-            stockId: s.id,
-            model_name: s.modelName,
-            high_24h: parseFloat(high.toFixed(2)),
-            low_24h: parseFloat(low.toFixed(2)),
-            arbitrage_diff: parseFloat((high - low).toFixed(2)),
-            arbitrage_percent: parseFloat(
-              (((high - low) / low) * 100).toFixed(2),
-            ),
-          };
-        });
+      // 映射全部模型（不再按 stale 过滤）；元素含 stockId + model_name + stale（展示用冗余）。
+      // high_24h/low_24h 保留自接口的 24h 最高/最低，同时被图表（今日高/低线）消费。
+      const list = response.stocks.map((s) => {
+        const high = s.high24hCents / 100;
+        const low = s.low24hCents / 100;
+        return {
+          stockId: s.id,
+          model_name: s.modelName,
+          stale: s.stale === true, // true=行情停滞
+          high_24h: parseFloat(high.toFixed(2)),
+          low_24h: parseFloat(low.toFixed(2)),
+        };
+      });
 
       const data = Storage.load();
       data.arbitrageData = list;
@@ -1578,7 +1574,6 @@
       box-shadow: 0 8px 32px rgba(0,0,0,0.5);
       display: none;
       flex-direction: column;
-      overflow: hidden;
     }
     #ark-arbitrage-panel.visible { display: flex; }
     #ark-arbitrage-panel .panel-body {
@@ -1613,6 +1608,19 @@
     .ark-arbitrage-sort-select:focus {
       outline: none;
       border-color: #89b4fa;
+    }
+    .ark-arbitrage-filter-label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--ark-label);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .ark-arbitrage-filter-label input[type="checkbox"] {
+      accent-color: #89b4fa;
+      cursor: pointer;
     }
     .ark-arbitrage-table-wrap {
       max-height: 400px;
@@ -3295,7 +3303,10 @@
 
         // 将交易价格作为数据点补入 chartData，保证买卖点标记垂直位置准确
         const trades = data.tradeHistory?.[stockId] || [];
-        const enrichedChartData = Chart.enrichWithTradePrices(chartData, trades);
+        const enrichedChartData = Chart.enrichWithTradePrices(
+          chartData,
+          trades,
+        );
 
         const chart = await Chart.createThemedChart(container);
         const series = Chart.createPriceLineSeries(chart, enrichedChartData);
@@ -3546,7 +3557,10 @@
 
         // 将交易价格作为数据点补入 chartData，保证买卖点标记垂直位置准确
         const trades = data.tradeHistory?.[panelInfo.stockId] || [];
-        const enrichedChartData = Chart.enrichWithTradePrices(chartData, trades);
+        const enrichedChartData = Chart.enrichWithTradePrices(
+          chartData,
+          trades,
+        );
 
         instance.series.setData(enrichedChartData);
         instance.chartData = enrichedChartData;
@@ -3732,7 +3746,7 @@
             <div class="ark-section-label">行情数据</div>
             <div class="ark-market-entrance">
               <a href="javascript:void(0)" class="ark-latest-price-link" id="ark-latest-price-btn">最新价格</a>
-              <a href="javascript:void(0)" class="ark-arbitrage-link" id="ark-arbitrage-btn">活跃套利榜</a>
+              <a href="javascript:void(0)" class="ark-arbitrage-link" id="ark-arbitrage-btn">套利幅度榜</a>
               <a href="javascript:void(0)" class="ark-positions-link" id="ark-positions-btn">我的持仓</a>
               <a href="javascript:void(0)" class="ark-positions-link" id="ark-trades-btn">交易记录</a>
             </div>
@@ -3837,13 +3851,7 @@
           UIPanels._arbitragePanel.classList.add("visible");
           UIPanels.bringToFront(UIPanels._arbitragePanel);
           const data = Storage.load();
-          const sortSelect = UIPanels._arbitragePanel.querySelector(
-            "#ark-arbitrage-sort-select",
-          );
-          UIRenderers.renderArbitrageTable(
-            data.arbitrageData || [],
-            sortSelect ? sortSelect.value : "arbitrage_diff",
-          );
+          UIRenderers.renderArbitrageTable(data.arbitrageData || []);
           if (data.lastUpdateTime) {
             UIRenderers.updateArbitrageLastUpdateDisplay(data.lastUpdateTime);
           }
@@ -4851,15 +4859,29 @@
       if (this._arbitragePanel) return this._arbitragePanel;
 
       const data = Storage.load();
+      // 面板级选择状态（关闭/重开期间保留；跨页面刷新不保留）
+      this._arbitrageSelection = this._arbitrageSelection || {
+        days: 1,
+        activeOnly: true,
+      };
+      const sel = this._arbitrageSelection;
       this._arbitragePanel = document.createElement("div");
       this._arbitragePanel.id = "ark-arbitrage-panel";
 
       this._arbitragePanel.innerHTML = `
         <div class="ark-panel-header">
           <div class="header-left">
-            <span class="title">活跃套利榜</span>
+            <span class="title">套利幅度榜</span>
           </div>
           <div class="header-right">
+            <span class="info-btn-wrap">
+              <button class="info-btn" title="">💡</button>
+              <span class="info-tooltip">
+                <div>小提示：</div>
+                <div>行情停滞的模型在无指定天数的历史数据时，会取停滞前的 24 小时数据来计算，</div>
+                <div>可能与其他模型数据不在同一时间段，此时排行结果仅供参考！</div>
+              </span>
+            </span>
             <button class="close-btn" title="关闭">&times;</button>
           </div>
         </div>
@@ -4868,12 +4890,21 @@
             <div class="ark-last-update">
               最近更新：<span id="ark-arbitrage-last-update-time">${data.lastUpdateTime ? TimeUtils.formatDateTime(data.lastUpdateTime, "full") : "从未更新"}</span>
             </div>
-            <div style="display:flex;gap:10px;">
+            <div style="display:flex;gap:10px;align-items:center;">
+              <label class="ark-arbitrage-filter-label">
+                <input type="checkbox" id="ark-arbitrage-active-only" ${sel.activeOnly ? "checked" : ""}>
+                只看未停滞模型
+              </label>
               <div class="ark-arbitrage-sort-wrapper">
-                <span style="color:var(--ark-label);font-size:12px;">排序字段：</span>
-                <select class="ark-arbitrage-sort-select" id="ark-arbitrage-sort-select">
-                  <option value="arbitrage_diff">每股套利价差</option>
-                  <option value="arbitrage_percent">每股套利幅度</option>
+                <span style="color:var(--ark-label);font-size:12px;">最近天数：</span>
+                <select class="ark-arbitrage-sort-select" id="ark-arbitrage-days-select">
+                  <option value="1"${sel.days === 1 ? " selected" : ""}>1 天</option>
+                  <option value="2"${sel.days === 2 ? " selected" : ""}>2 天</option>
+                  <option value="3"${sel.days === 3 ? " selected" : ""}>3 天</option>
+                  <option value="4"${sel.days === 4 ? " selected" : ""}>4 天</option>
+                  <option value="5"${sel.days === 5 ? " selected" : ""}>5 天</option>
+                  <option value="6"${sel.days === 6 ? " selected" : ""}>6 天</option>
+                  <option value="7"${sel.days === 7 ? " selected" : ""}>7 天</option>
                 </select>
               </div>
             </div>
@@ -4896,19 +4927,31 @@
           this._arbitragePanel.classList.remove("visible");
         });
 
-      const sortSelect = this._arbitragePanel.querySelector(
-        "#ark-arbitrage-sort-select",
+      const daysSelect = this._arbitragePanel.querySelector(
+        "#ark-arbitrage-days-select",
+      );
+      const activeBox = this._arbitragePanel.querySelector(
+        "#ark-arbitrage-active-only",
       );
 
-      sortSelect.addEventListener("change", () => {
+      const rerenderArbitrage = () => {
         const d = Storage.load();
         const dataToRender = d.arbitrageData || [];
-        UIRenderers.renderArbitrageTable(dataToRender, sortSelect.value);
+        UIRenderers.renderArbitrageTable(dataToRender);
+      };
+
+      daysSelect.addEventListener("change", () => {
+        this._arbitrageSelection.days = Number(daysSelect.value) || 1;
+        rerenderArbitrage();
+      });
+      activeBox.addEventListener("change", () => {
+        this._arbitrageSelection.activeOnly = activeBox.checked;
+        rerenderArbitrage();
       });
 
       if (data.lastUpdateTime) {
         const dataToRender = data.arbitrageData || [];
-        UIRenderers.renderArbitrageTable(dataToRender, "arbitrage_diff");
+        UIRenderers.renderArbitrageTable(dataToRender);
         UIRenderers.updateArbitrageLastUpdateDisplay(data.lastUpdateTime);
       }
 
@@ -6184,7 +6227,46 @@
       }
     },
 
-    renderArbitrageTable(arbitrageData, sortBy = "arbitrage_diff") {
+    // 读取面板当前选择（最近天数 + 只看未停滞）
+    getArbitrageSelection() {
+      const panel = UIPanels._arbitragePanel;
+      const daysSelect = panel?.querySelector("#ark-arbitrage-days-select");
+      const activeOnly = panel?.querySelector("#ark-arbitrage-active-only");
+      return {
+        days: Number(daysSelect?.value) || 1,
+        activeOnly: activeOnly ? activeOnly.checked : true,
+      };
+    },
+
+    // 按所选天数计算区间的最低/最高价与套利幅度。
+    // 1 天直接取接口 24h 高/低；>=2 天优先从本地 priceData 取区间 min/max，
+    // 本地无匹配历史时回退用 24h 高/低。
+    computeArbitrageMetrics(item, days, priceData) {
+      const fallback = { high: item.high_24h, low: item.low_24h };
+      let high, low;
+      if (days === 1) {
+        high = item.high_24h;
+        low = item.low_24h;
+      } else {
+        const nowSec = Utils.getCurrentSecondsTimestamp();
+        const cutoff = nowSec - days * 86400;
+        const pts = (priceData[item.stockId] || []).filter(
+          (p) => p[0] >= cutoff,
+        );
+        if (pts.length) {
+          const prices = pts.map((p) => p[1]);
+          high = Math.max(...prices);
+          low = Math.min(...prices);
+        } else {
+          high = fallback.high;
+          low = fallback.low;
+        }
+      }
+      const percent = low > 0 ? ((high - low) / low) * 100 : null;
+      return { high, low, percent };
+    },
+
+    renderArbitrageTable(arbitrageData) {
       const wrap = document.querySelector("#ark-arbitrage-table-wrap");
       if (!wrap) return;
 
@@ -6193,44 +6275,63 @@
         return;
       }
 
-      const sortedData = [...arbitrageData].sort(
-        (a, b) => b[sortBy] - a[sortBy],
-      );
-
-      // Load current monitored stockIds
+      const sel = this.getArbitrageSelection();
       const d = Storage.load();
+      const priceData = d.priceData || {};
       const monitoredIds = new Set(d.stockIds);
+
+      // 可选：只看未停滞模型（默认勾选）
+      let base = arbitrageData;
+      if (sel.activeOnly) {
+        base = base.filter((x) => x.stale !== true);
+      }
+
+      // 计算每行区间指标
+      const rows = base.map((item) => {
+        const metrics = this.computeArbitrageMetrics(item, sel.days, priceData);
+        return { item, metrics };
+      });
+
+      // 默认按套利幅度降序，空值置底
+      rows.sort(
+        (a, b) =>
+          (b.metrics.percent ?? -Infinity) - (a.metrics.percent ?? -Infinity),
+      );
 
       let html = `
         <table class="ark-arbitrage-table">
           <thead>
             <tr>
               <th>排行</th>
-              <th title="只记录最近30分钟内有价格更新的模型">模型</th>
+              <th>模型</th>
               <th>每股最低价</th>
               <th>每股最高价</th>
-              <th title="最高价 - 最低价">每股套利价差</th>
-              <th title="每股套利价差 / 最低价 × 100%">每股套利幅度</th>
+              <th title="(最高价 - 最低价) / 最低价 × 100%">每股套利幅度</th>
+              <th title="stale=true 表示该模型行情停滞">行情停滞</th>
               <th>监控操作</th>
             </tr>
           </thead>
           <tbody>
       `;
 
-      sortedData.forEach((item, index) => {
+      rows.forEach(({ item, metrics }, index) => {
         const isMonitored = monitoredIds.has(item.stockId);
         const buttonText = isMonitored ? "取消" : "添加";
         const buttonClass = isMonitored
           ? "ark-btn ark-btn-danger ark-btn-xs"
           : "ark-btn ark-btn-primary ark-btn-xs";
+        const fmt = (v) => (v == null ? "--" : v.toFixed(2));
+        const pct =
+          metrics.percent == null ? "--" : `+${metrics.percent.toFixed(2)}%`;
+        const isStale = item.stale === true;
         html += `
           <tr>
             <td>${index + 1}</td>
             <td>${Utils.escapeHtml(item.model_name)}</td>
-            <td class="price-low">${item.low_24h.toFixed(2)}</td>
-            <td class="price-high">${item.high_24h.toFixed(2)}</td>
-            <td class="price-high">+${item.arbitrage_diff.toFixed(2)}</td>
-            <td class="price-high">+${item.arbitrage_percent.toFixed(2)}%</td>
+            <td class="price-low">${fmt(metrics.low)}</td>
+            <td class="price-high">${fmt(metrics.high)}</td>
+            <td class="price-high">${pct}</td>
+            <td class="${isStale ? "price-low" : "price-high"}">${isStale ? "是" : "否"}</td>
             <td><button class="${buttonClass}" data-stock-id="${Utils.escapeHtml(String(item.stockId))}" data-action="${isMonitored ? "remove" : "add"}">${buttonText}</button></td>
           </tr>
         `;
@@ -6258,7 +6359,7 @@
               UIRenderers.refreshPriceTable(data);
               // Re-render arbitrage table to update button state
               const dataToRender = data.arbitrageData || [];
-              this.renderArbitrageTable(dataToRender, sortBy);
+              this.renderArbitrageTable(dataToRender);
             }
           } else if (action === "remove") {
             // Remove model from monitored list
@@ -6268,7 +6369,7 @@
             UIRenderers.refreshPriceTable(data);
             // Re-render arbitrage table to update button state
             const dataToRender = data.arbitrageData || [];
-            this.renderArbitrageTable(dataToRender, sortBy);
+            this.renderArbitrageTable(dataToRender);
           }
         });
       });
@@ -6612,14 +6713,8 @@
           UIPanels._arbitragePanel.classList.contains("visible")
         ) {
           currentData = Storage.load();
-          const sortSelect = UIPanels._arbitragePanel.querySelector(
-            "#ark-arbitrage-sort-select",
-          );
           const dataToRender = currentData.arbitrageData || [];
-          UIRenderers.renderArbitrageTable(
-            dataToRender,
-            sortSelect ? sortSelect.value : "arbitrage_diff",
-          );
+          UIRenderers.renderArbitrageTable(dataToRender);
           UIRenderers.updateArbitrageLastUpdateDisplay(
             currentData.lastUpdateTime,
           );

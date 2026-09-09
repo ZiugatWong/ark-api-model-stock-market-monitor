@@ -7,12 +7,12 @@
 Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控面板（原 windhub.cc 站点已迁移至此）。
 
 **核心功能：**
-- 多面板 UI（主面板、价格、持仓、套利榜、交易记录、设置、数据维护），支持拖拽和主题切换
+- 多面板 UI（主面板、价格、持仓、套利幅度榜、交易记录、设置、数据维护），支持拖拽和主题切换
 - 模型管理：选择器支持搜索、全选、清空，以 stockId 为主键
 - 价格监控：自动/手动获取、历史表格、颜色编码价格变化
 - 多图表系统：Lightweight Charts 实现，支持价格线（今日高/低、持仓成本线）、买卖点交易标记、拖拽调整大小
 - 通知系统：价格突破提醒（弹窗、声音、Telegram、Bark iOS）
-- 活跃套利榜：24 小时价格波动排行（单一实时榜）
+- 套利幅度榜：按所选「最近天数」区间计算的 每股套利幅度排行（单一实时榜；默认只看未停滞模型）
 - 买入/卖出交易：行情右键菜单一键下单，前端实时校验（余额/持仓/手续费/休市/锁定），并本地记录交易历史
 - 交易记录面板：展示通过本脚本成功买卖的历史（模型下拉筛选，买红卖绿）
 - 市场状态：展示开闭市、买卖手续费、持仓时长
@@ -28,7 +28,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 4. 主题 (行 249-327) - Theme（主题切换和应用）
 5. 工具函数 (行 328-479) - Utils（含 getModelName 反查）、TimeUtils
 6. API (行 480-636) - 市场数据 GET /api/stock、买入卖出 POST /api/stock、余额 /api/me/balance、模型列表
-7. 数据处理 (行 637-937) - DataProcessor（价格变化检测、持仓派生、套利榜、通知检查、recordTrade 本地交易记录）
+7. 数据处理 (行 637-937) - DataProcessor（价格变化检测、持仓派生、套利数据、通知检查、recordTrade 本地交易记录）
 8. 通知 (行 940-1174) - Notification（弹窗、声音、Telegram、Bark 推送）
 9. 定时任务 (行 1176-) - Scheduler（分钟尾数触发器）
 10. 样式 (行 -) - Styles（CSS 注入）
@@ -46,7 +46,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 - `priceData` - 价格历史 `{[stockId]: [[秒时间戳, 代币价格]]}`
 - `positions` - 持仓数据 `{[stockId]: {shares, avg_cost, locked_until, pnl...}}`
 - `tradeHistory` - 交易历史 `{[stockId]: [{id, side, shares, price, gross, fee, net, created_at}]}`（仅记录通过本脚本成功买卖，本地保存）
-- `arbitrageData` - 套利数据（单一实时榜数组）
+- `arbitrageData` - 套利数据（全模型快照数组，含 stale 标记与 24h 高/低，键为 stockId）
 - `notifications` - 价格提醒配置（键为 stockId）
 - `marketRules` - 市场状态 `{enabled, rules}` 快照
 - `userTokens` - 可用代币（整数，来自 /api/me/balance）
@@ -63,7 +63,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 - **右键菜单**：`UIRenderers.showTradeContextMenu` 取代原 `showColorMenu`，卖出生效项需有持仓，颜色标识下沉为二级浮层（`_buildColorSubmenu`）
 - **主键策略**：全部用 stockId 串联，展示模型名时通过 `idToModel` 查表（规避模型改名/重名风险）
 - **价格历史时间戳**：stale=false（活跃）模型，取 ticks 前 n 条按 stockId 匹配的 createdAt（秒）
-- **stale 语义**：`stale === false` 表示数据新鲜/活跃（本轮有 tick）；`stale === true` 表示数据陈旧（无 tick）
+- **stale 语义**：`stale === false` 表示数据新鲜/活跃（本轮有 tick），套利幅度榜为「未停滞」，显示绿色；`stale === true` 表示数据陈旧（无 tick），为「停滞」，显示红色
 - **价格单位**：代币（priceCents/100），1 代币 = 100 分；余额 tokens 为整数代币
 - **持仓派生**：费率从 `rules.buyFeePct`/`sellFeePct` 取（非硬编码），现价从 stocks 映射
 - **持仓总值**：本地累加 `Σ(shares × priceCents/100)`，与 userTokens 同口径
