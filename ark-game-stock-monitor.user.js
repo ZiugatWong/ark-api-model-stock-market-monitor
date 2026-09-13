@@ -1385,7 +1385,7 @@
     .ark-panel-header .info-btn {
       background: none;
       border: none;
-      font-size: 16px;
+      font-size: 12px;
       cursor: pointer;
       padding: 0 4px;
       line-height: 1;
@@ -2075,6 +2075,16 @@
       line-height: 1;
     }
     .ark-chart-panel .chart-header .close-btn:hover { color: #ff8e8e; }
+    .ark-chart-panel .chart-header .chart-download-btn {
+      background: none;
+      border: none;
+      color: #8ab4f8;
+      font-size: 15px;
+      cursor: pointer;
+      padding: 0 4px;
+      line-height: 1;
+    }
+    .ark-chart-panel .chart-header .chart-download-btn:hover { color: #a5c8ff; }
     .ark-chart-panel .chart-body {
       flex: 1;
       padding: 12px;
@@ -3058,7 +3068,10 @@
       panel.innerHTML = `
         <div class="chart-header">
           <div class="chart-title" id="${panelId}-title">分时走势图 > ${Utils.escapeHtml(modelName)}</div>
-          <button class="close-btn" title="关闭">&times;</button>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <button class="chart-download-btn" title="保存为图片">&#11015;</button>
+            <button class="close-btn" title="关闭">&times;</button>
+          </div>
         </div>
         <div class="chart-body">
           <div id="${panelId}-container" class="ark-chart-container"></div>
@@ -3266,6 +3279,12 @@
       const closeBtn = panel.querySelector(".chart-header .close-btn");
       if (closeBtn) closeBtn.onclick = () => this.closePanel(panelId);
 
+      const downloadBtn = panel.querySelector(
+        ".chart-header .chart-download-btn",
+      );
+      if (downloadBtn)
+        downloadBtn.onclick = () => this.downloadChartScreenshot(panelId);
+
       Interactions.initDrag(panel, panelId, this);
       Interactions.initResize(panel, panelId, this);
 
@@ -3449,6 +3468,63 @@
 
     getAllPanelIds() {
       return Array.from(this.panels.keys());
+    }
+
+    downloadChartScreenshot(panelId) {
+      const panelInfo = this.panels.get(panelId);
+      if (!panelInfo) return;
+
+      const chartId = panelInfo.chartInstance;
+      const instance = chartId && this.chartInstances.get(chartId);
+      const chart = instance && instance.chart;
+      if (!chart || typeof chart.takeScreenshot !== "function") {
+        Chart.showChartError("该图表暂无法截图");
+        return;
+      }
+
+      // 图表本体（含坐标轴、价格线、交易标记）——官方 API 返回绘制好的 canvas
+      const chartCanvas = chart.takeScreenshot();
+
+      const headerEl = panelInfo.element.querySelector(".chart-header");
+      const titleEl = headerEl && headerEl.querySelector(".chart-title");
+      if (!headerEl || !titleEl) return;
+
+      const cw = chartCanvas.width;
+      const ch = chartCanvas.height;
+      const headerH = Math.round(headerEl.getBoundingClientRect().height);
+
+      // 组合：标题栏（手动按真实样式重绘）+ 图表本体
+      const offscreen = document.createElement("canvas");
+      offscreen.width = cw;
+      offscreen.height = headerH + ch;
+      const ctx = offscreen.getContext("2d");
+
+      ctx.drawImage(chartCanvas, 0, headerH);
+
+      const hs = getComputedStyle(headerEl);
+      const ts = getComputedStyle(titleEl);
+      ctx.fillStyle = hs.backgroundColor;
+      ctx.fillRect(0, 0, cw, headerH);
+      ctx.fillStyle = hs.borderBottomColor;
+      ctx.fillRect(0, headerH - 1, cw, 1);
+
+      // 标题文字（与 CSS 8px 12px 对齐），字体/颜色取自真实 computed style 以适配主题
+      const titleText = titleEl.textContent.trim();
+      ctx.fillStyle = ts.color;
+      ctx.font = `${ts.fontWeight} ${ts.fontSize} ${ts.fontFamily}`;
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "left";
+      ctx.fillText(titleText, 12, headerH / 2);
+
+      // 触发下载：走势图_模型名_时间戳.png
+      const modelName = Utils.getModelName(panelInfo.stockId);
+      const stamp = Date.now();
+      const a = document.createElement("a");
+      a.download = `走势图_${modelName}_${stamp}.png`;
+      a.href = offscreen.toDataURL("image/png");
+      document.body.appendChild(a);
+      a.click();
+      if (a.parentNode) a.parentNode.removeChild(a);
     }
 
     setChartInstance(panelId, chartId, instance) {
