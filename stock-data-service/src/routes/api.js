@@ -1,6 +1,7 @@
 const express = require('express');
 const priceStorage = require('../services/priceStorage');
 const syncScheduler = require('../services/syncScheduler');
+const arkGameApi = require('../services/arkGameApi');
 const { sendSuccess, sendError, asyncHandler } = require('../utils/responseHelper');
 const { DATA_RETENTION_DAYS } = require('../constants/business');
 const logger = require('../utils/logger');
@@ -57,6 +58,17 @@ router.post('/sync', asyncHandler('/api/sync', async (req, res) => {
   });
 
   sendSuccess(res, { message: '同步任务已触发' });
+}));
+
+/**
+ * POST /api/backfill
+ * 手动触发补漏：全量检查所有模型、只补 Redis 缺失的时间戳（无请求体）
+ */
+router.post('/backfill', asyncHandler('/api/backfill', async (req, res) => {
+  const marketData = await arkGameApi.fetchMarketData(); // 复用现有 API 封装（含重试）
+  const ticks = Array.isArray(marketData.ticks) ? marketData.ticks : [];
+  const result = await priceStorage.backfillAll(ticks);
+  sendSuccess(res, result);
 }));
 
 module.exports = router;

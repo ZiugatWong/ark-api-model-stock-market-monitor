@@ -1,6 +1,6 @@
 # Stock Data Service
 
-Ark API 模型股票数据服务 - 独立的后端服务，提供价格数据的定时同步和 HTTP API 查询。
+Ark 模型股票数据服务 - 独立的后端服务，提供价格数据的定时同步和 HTTP API 查询。
 
 对接站点：[game.arkengine.me](https://game.arkengine.me)（原股市功能已从 windhub.cc 迁移到此站点）。
 
@@ -131,6 +131,24 @@ docker compose down -v
 {
   "success": true,
   "data": { "message": "同步任务已触发" }
+}
+```
+
+### POST /api/backfill
+
+手动触发补漏（无请求体）。全量检查从行情 API 返回的所有模型的缺失数据：把 `ticks` 按「模型连续不重复」还原成多批，每批过滤掉与批内最大时间戳差超 5 分钟的旧数据、并把该批时间戳统一为批内最大时间戳（与定时同步一致的归一化规则），只把这些缺失时间戳补回 Redis、不覆盖已有数据。**服务启动时也会自动执行一次补漏**，结果写入服务日志。
+
+**响应：**
+```json
+{
+  "success": true,
+  "data": {
+    "modelCount": 3,
+    "perModel": {
+      "2239": 3,
+      "12202": 2
+    }
+  }
 }
 ```
 

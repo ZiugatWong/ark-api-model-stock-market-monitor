@@ -95,6 +95,9 @@ async function start() {
 
     // 启动定时任务
     await syncScheduler.start();
+
+    // 启动时补漏一次（结果写入日志，独立于定时同步，追回停机期间遗漏的数据点）
+    await syncScheduler.backfillOnce();
   } catch (error) {
     logger.error("启动", "启动失败:", error.message);
     process.exit(1);

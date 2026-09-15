@@ -1,6 +1,7 @@
 const { CronJob } = require("cron");
 const redis = require("../config/redis");
 const arkGameApi = require("./arkGameApi");
+const priceStorage = require("./priceStorage");
 const notificationService = require("./notificationService");
 const config = require("../config/env");
 const logger = require("../utils/logger");
@@ -148,6 +149,21 @@ class SyncScheduler {
           notifyError.message,
         );
       }
+    }
+  }
+
+  /**
+   * 启动时补漏一次：拉取行情 ticks，全量核对并补写 Redis 缺失的历史数据点。
+   * 结果由 priceStorage.backfillAll 内部写入日志。
+   */
+  async backfillOnce() {
+    try {
+      logger.log("补漏", "开始启动补漏...");
+      const marketData = await arkGameApi.fetchMarketData();
+      const ticks = Array.isArray(marketData.ticks) ? marketData.ticks : [];
+      await priceStorage.backfillAll(ticks);
+    } catch (error) {
+      logger.error("补漏", "启动补漏失败:", error.message);
     }
   }
 
