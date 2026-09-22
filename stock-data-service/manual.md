@@ -1,14 +1,12 @@
 &emsp;&emsp;本行情服务属于 [https://github.com/ZiugatWong/ark-api-model-stock-market-monitor](https://github.com/ZiugatWong/ark-api-model-stock-market-monitor) 的配套服务，如果佬觉得好用，可以顺手点个 star ～
 
-### 关于数据
+### 数据和星标
 
 - 行情数据每 5 分钟会自动刷新一次，无需频繁手动刷新
 - 行情数据并非从 Ark 站点实时获取，故会存在几分钟的延迟
 - 用户星标数据保存在浏览器的 localStorage 里，不会上传到服务器
-
-### 关于星标
-
-- 选择 ★ 或 ☆ 后，需刷新一次才会将对应的卡片置顶或取消置顶，置顶优先级为：星标正常 > 星标停滞 > 无星标正常 > 无星标停滞
+- 选择星标 ★ 或 ☆ 后，需刷新一次才会将对应的卡片置顶或取消置顶
+- 星标置顶优先级为：星标正常 > 星标停滞 > 无星标正常 > 无星标停滞
 
 ### 桌面端查看走势图
 

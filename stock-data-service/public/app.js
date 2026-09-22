@@ -498,6 +498,7 @@
     _onKey: null,
     _themeSub: null,
     _raf: 0,
+    _priceLines: null,
 
     open(stockId) {
       const model = State.models.find((m) => m.id === stockId);
@@ -529,6 +530,11 @@
         tabs.appendChild(btn);
       }
 
+      // 遮罩交互（onclick 幂等赋值，重复开关详情不会累积监听器）
+      document.getElementById("detail-overlay").hidden = false;
+      document.getElementById("detail-backdrop").onclick = () => this.close();
+      document.getElementById("btn-detail-close").onclick = () => this.close();
+
       // 图表
       const container = document.getElementById("chart-container");
       container.innerHTML = "";
@@ -537,11 +543,6 @@
       this._createTooltip(container);
 
       this.applyRange(State.range);
-
-      // 遮罩交互（onclick 幂等赋值，重复开关详情不会累积监听器）
-      document.getElementById("detail-overlay").hidden = false;
-      document.getElementById("detail-backdrop").onclick = () => this.close();
-      document.getElementById("btn-detail-close").onclick = () => this.close();
       this._onKey = (e) => {
         if (e.key === "Escape") this.close();
       };
@@ -663,6 +664,9 @@
       this.series.setData(data);
 
       this._updateStats(series);
+
+      // 最高/最低价线：沿用用户脚本 createPriceLine 方案（虚线 + 轴标签）
+      this._updatePriceLines(series);
       if (data.length > 0) {
         const from =
           range.seconds === Infinity
@@ -680,6 +684,45 @@
 
     setRange(key) {
       this.applyRange(key);
+    },
+
+    // 最高/最低价线（参考用户脚本：LineStyle.Dashed=2，买绿卖红沿用其高/低线配色）
+    // 先移除旧线再重建，避免残留已消失的价格水平
+    _updatePriceLines(series) {
+      if (!this.series) return;
+      if (this._priceLines) {
+        for (const line of Object.values(this._priceLines)) {
+          if (line) this.series.removePriceLine(line);
+        }
+        this._priceLines = null;
+      }
+      if (!series || series.length === 0) return;
+
+      let max = series[0].price,
+        min = series[0].price;
+      for (const p of series) {
+        if (p.price > max) max = p.price;
+        if (p.price < min) min = p.price;
+      }
+
+      this._priceLines = {
+        highLine: this.series.createPriceLine({
+          price: max,
+          color: "#00A854",
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: "最高价",
+        }),
+        lowLine: this.series.createPriceLine({
+          price: min,
+          color: "#F55454",
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: "最低价",
+        }),
+      };
     },
 
     _updateChangeLabel() {
@@ -783,6 +826,7 @@
       }
       this.series = null;
       this.tooltip = null;
+      this._priceLines = null; // 价格线随 chart.remove() 一并销毁
       State.detailId = null;
       document.getElementById("detail-overlay").hidden = true;
     },
