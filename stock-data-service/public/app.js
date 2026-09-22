@@ -45,7 +45,7 @@
   const State = {
     models: [], // [{id, name, stale, price}]
     priceData: {}, // {[stockId]: [{timestamp(秒), price}]}
-    range: "7d",
+    range: "1d", // 详情视图默认可视区间（图表始终加载全量数据，区间仅控制可视窗口）
     detailId: null,
     timer: null,
     lastUpdated: 0,
@@ -503,6 +503,7 @@
       const model = State.models.find((m) => m.id === stockId);
       if (!model) return;
       State.detailId = stockId;
+      State.range = "1d"; // 每次进入详情默认 1 天区间
 
       // 填充头部
       document.getElementById("detail-name").textContent = model.name;
@@ -646,10 +647,11 @@
       this.chart.subscribeCrosshairMove(this._crosshairHandler);
     },
 
-    // 时间范围：纯客户端切片（setData 会重置视口，之后必须重设 setVisibleRange）
+    // 时间范围：图表始终 setData 全量数据，区间仅切换可视窗口（setVisibleRange）
+    // （setData 会重置视口，因此每次之后都必须重设 setVisibleRange）
     applyRange(key) {
       State.range = key;
-      const range = RANGES.find((r) => r.key === key) || RANGES[2];
+      const range = RANGES.find((r) => r.key === key) || RANGES[0];
 
       // 标签激活态
       document.querySelectorAll(".range-tab").forEach((el, i) => {
@@ -657,18 +659,20 @@
       });
 
       const series = State.priceData[State.detailId] || [];
-      const cut =
-        range.seconds === Infinity
-          ? -Infinity
-          : Math.floor(Date.now() / 1000) - range.seconds;
-      const slice = series.filter((p) => p.timestamp >= cut);
-      const data = slice.map((p) => ({ time: p.timestamp, value: p.price }));
+      const data = series.map((p) => ({ time: p.timestamp, value: p.price }));
       this.series.setData(data);
 
-      this._updateStats(slice);
+      this._updateStats(series);
       if (data.length > 0) {
+        const from =
+          range.seconds === Infinity
+            ? data[0].time
+            : Math.max(
+                Math.floor(Date.now() / 1000) - range.seconds,
+                data[0].time,
+              );
         this.chart.timeScale().setVisibleRange({
-          from: data[0].time,
+          from,
           to: data[data.length - 1].time,
         });
       }
@@ -714,8 +718,8 @@
       }
       stats.innerHTML = "";
       const items = [
-        ["区间最高", formatPrice(max)],
-        ["区间最低", formatPrice(min)],
+        ["最高价", formatPrice(max)],
+        ["最低价", formatPrice(min)],
         ["采样点数", String(slice.length)],
       ];
       for (const [label, value] of items) {

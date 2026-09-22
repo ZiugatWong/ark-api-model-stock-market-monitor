@@ -1,4 +1,4 @@
-本行情服务属于 [https://github.com/ZiugatWong/ark-api-model-stock-market-monitor](https://github.com/ZiugatWong/ark-api-model-stock-market-monitor) 的配套服务，如果佬觉得好用，可以顺手点个 star ～
+&emsp;&emsp;本行情服务属于 [https://github.com/ZiugatWong/ark-api-model-stock-market-monitor](https://github.com/ZiugatWong/ark-api-model-stock-market-monitor) 的配套服务，如果佬觉得好用，可以顺手点个 star ～
 
 ### 关于数据
 
@@ -8,12 +8,13 @@
 
 ### 关于星标
 
-选择 ★ 或 ☆ 后，需刷新一次才会将对应的卡片置顶或取消置顶，置顶优先级为：星标正常 > 星标停滞 > 无星标正常 > 无星标停滞
+- 选择 ★ 或 ☆ 后，需刷新一次才会将对应的卡片置顶或取消置顶，置顶优先级为：星标正常 > 星标停滞 > 无星标正常 > 无星标停滞
 
 ### 桌面端查看走势图
 
-- **滚轮**可实现窗口区域放大或缩小
-- **拖拽**可移动窗口区域
+- 鼠标**滚轮**可实现窗口区域放大或缩小
+- 鼠标**拖拽**可移动窗口区域
+- 键盘 **Esc** 可快速关闭走势图
 
 ### 移动端查看走势图
 
@@ -21,5 +22,3 @@
 - **单指拖动**坐标轴可缩放坐标轴
 - **单指拖动**窗口可移动窗口区域
 - **长按**可查看数据点标签，此时**单指拖动**数据点会跟随移动
-
-详情视图的时间区间只改变起始位置，不限制数据，默认 1 天
