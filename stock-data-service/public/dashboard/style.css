@@ -170,6 +170,12 @@ button {
 }
 
 /* ---------- 错误横条 ---------- */
+/* 外层包裹：限宽与 #grid 对齐，横条在其中居中 */
+#error-banner-wrap {
+  max-width: 1560px;
+  margin: 0 auto;
+}
+
 #error-banner {
   display: flex;
   align-items: center;
