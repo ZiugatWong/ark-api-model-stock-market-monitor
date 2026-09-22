@@ -35,7 +35,17 @@ app.use(compression());
 
 // dashboard 静态托管：仅通过 /dashboard 前缀访问（页面位于 public/dashboard/），
 // 挂在限流之前，页面资源加载不消耗 API 限流配额；未命中的路径 fallthrough 到限流与路由。
-app.use("/dashboard", express.static(path.join(__dirname, "..", "public", "dashboard")));
+// no-cache + ETag 协商缓存：文件变更即时生效；未变更时 304 空响应，不重复传输内容
+app.use(
+  "/dashboard",
+  express.static(path.join(__dirname, "..", "public", "dashboard"), {
+    etag: true,
+    lastModified: true,
+    setHeaders(res) {
+      res.setHeader("Cache-Control", "no-cache");
+    },
+  }),
+);
 
 // 应用限流中间件（/api/models、/api/prices/batch、/api/manual 与 /health 由 skip 跳过，不限流）
 app.use(rateLimiter);
