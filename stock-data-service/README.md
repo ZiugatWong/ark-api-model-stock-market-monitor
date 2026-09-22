@@ -10,7 +10,7 @@ Ark 模型股票数据服务 - 独立的后端服务，提供价格数据的定�
 - ✅ Redis 持久化存储（AOF + RDB 双保障）
 - ✅ 最近 7 天价格历史查询
 - ✅ 批量查询多个模型价格
-- ✅ Dashboard 可视化页面（同源托管，根路径 `/` 直接访问）：模型走势卡片网格 + 点击进入 Lightweight Charts 大图详情，新野兽派设计，明暗双主题，响应式适配桌面与移动端
+- ✅ Dashboard 可视化页面（同源托管，访问 `/dashboard`）：模型走势卡片网格 + 点击进入 Lightweight Charts 大图详情，新野兽派设计，明暗双主题，响应式适配桌面与移动端
 - ✅ GET /api/models 模型列表（带缓存与上游故障兜底降级）
 - ✅ 响应 gzip 压缩（compression）
 - ✅ IP 限流保护（基于 Redis 存储）
@@ -82,7 +82,7 @@ docker compose down -v
 
 ## Dashboard 页面
 
-浏览器访问服务根路径（如 `http://localhost:3210/`）即可打开 dashboard：
+浏览器访问 `http://localhost:3210/dashboard` 即可打开 dashboard：
 
 - **网格总览**：每个模型一张走势卡片（名称、停滞徽章、现价、最新涨跌幅、SVG 迷你走势线），响应式网格（移动端 1 列 → 桌面最多 4 列）
 - **大图详情**：点击卡片进入，Lightweight Charts v4 大图 + 十字线 tooltip，支持 1 天 / 3 天 / 7 天 / 全部 时间范围切换（纯客户端切片），底部显示区间最高/最低/采样点数
@@ -370,7 +370,7 @@ curl -X POST http://localhost:3210/api/prices/batch \
 curl http://localhost:3210/api/models
 
 # dashboard 页面
-curl -I http://localhost:3210/
+curl -I http://localhost:3210/dashboard
 
 # 手动触发同步
 curl -X POST http://localhost:3210/api/sync
@@ -427,10 +427,11 @@ stock-data-service/
 │   │   ├── responseHelper.js   # API 响应助手
 │   │   └── timeUtils.js        # 时间工具
 │   └── app.js                  # 应用入口
-├── public/                     # dashboard 静态页面（无构建）
-│   ├── index.html
-│   ├── style.css
-│   └── app.js
+├── public/                     # dashboard 静态页面（无构建，经 /dashboard 前缀托管）
+│   └── dashboard/
+│       ├── index.html
+│       ├── style.css
+│       └── app.js
 ├── Dockerfile
 ├── docker-compose.yml
 ├── redis.conf                  # Redis 持久化配置

@@ -33,9 +33,9 @@ app.use((req, res, next) => {
 // 响应压缩（dashboard 全量价格数据较大，gzip 后约 100~200KB）
 app.use(compression());
 
-// dashboard 静态托管：必须挂在限流之前，页面资源加载不消耗 API 限流配额；
-// 未命中的路径 fallthrough 到限流与路由。根路径 / 由默认 index.html 命中。
-app.use(express.static(path.join(__dirname, "..", "public")));
+// dashboard 静态托管：仅通过 /dashboard 前缀访问（页面位于 public/dashboard/），
+// 挂在限流之前，页面资源加载不消耗 API 限流配额；未命中的路径 fallthrough 到限流与路由。
+app.use("/dashboard", express.static(path.join(__dirname, "..", "public", "dashboard")));
 
 // 应用限流中间件（/api/models、/api/prices/batch、/api/manual 与 /health 由 skip 跳过，不限流）
 app.use(rateLimiter);
