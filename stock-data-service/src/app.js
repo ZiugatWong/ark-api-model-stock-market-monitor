@@ -1,4 +1,6 @@
 const express = require("express");
+const compression = require("compression");
+const path = require("path");
 const config = require("./config/env");
 const redis = require("./config/redis");
 const rateLimiter = require("./middleware/rateLimit");
@@ -28,7 +30,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// 应用限流中间件
+// 响应压缩（dashboard 全量价格数据较大，gzip 后约 100~200KB）
+app.use(compression());
+
+// dashboard 静态托管：必须挂在限流之前，页面资源加载不消耗 API 限流配额；
+// 未命中的路径 fallthrough 到限流与路由。根路径 / 由默认 index.html 命中。
+app.use(express.static(path.join(__dirname, "..", "public")));
+
+// 应用限流中间件（/api/models、/api/prices/batch、/api/manual 与 /health 由 skip 跳过，不限流）
 app.use(rateLimiter);
 
 // 挂载路由

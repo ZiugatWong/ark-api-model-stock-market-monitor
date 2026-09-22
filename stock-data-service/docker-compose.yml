@@ -5,6 +5,9 @@ services:
     container_name: ark-api-model-stock-service
     ports:
       - "3210:3210"
+    volumes:
+      # 挂载说明文档：改动即时生效，无需重建镜像或重启容器
+      - ./manual.md:/app/manual.md:ro
     environment:
       - NODE_ENV=production
       - REDIS_URL=redis://ark-api-model-stock-redis:6379

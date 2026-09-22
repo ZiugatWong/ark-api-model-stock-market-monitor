@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ark 模型股票 Dashboard</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.0.1/dist/lightweight-charts.standalone.production.js"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <!-- 内联防闪烁：CSS 加载前先定主题（默认暗色，localStorage 优先，回退系统偏好） -->
+  <script>
+    (function () {
+      var stored = null;
+      try { stored = localStorage.getItem('ark_dashboard_theme'); } catch (e) {}
+      var light = stored === 'light' || (stored === null &&
+        window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+      document.documentElement.className = light ? 'theme-light' : 'theme-dark';
+    })();
+  </script>
+
+  <header id="topbar">
+    <div class="topbar-brand">
+      <h1 class="topbar-title">ARK 模型股票行情</h1>
+      <span id="last-updated" class="last-updated" title="数据更新时间"></span>
+    </div>
+    <div class="topbar-actions">
+      <button id="btn-refresh" class="btn btn-icon" type="button" aria-label="刷新数据" title="刷新数据">⟳</button>
+      <button id="btn-theme" class="btn btn-icon" type="button" aria-label="切换主题" title="切换主题">☾</button>
+      <button id="btn-manual" class="btn btn-icon" type="button" aria-label="查看说明" title="说明">?</button>
+    </div>
+  </header>
+
+  <div id="error-banner" hidden>
+    <span id="error-text"></span>
+    <button id="btn-retry" class="btn btn-sm" type="button">重试</button>
+  </div>
+
+  <main id="grid" aria-live="polite"></main>
+
+  <!-- 详情视图：全屏遮罩 + 大图 -->
+  <div id="detail-overlay" hidden>
+    <div id="detail-backdrop"></div>
+    <section id="detail-panel" role="dialog" aria-modal="true" aria-labelledby="detail-name">
+      <div id="detail-header">
+        <div class="detail-title-box">
+          <h2 id="detail-name"></h2>
+          <span id="detail-stale" class="badge" hidden>停滞</span>
+        </div>
+        <div class="detail-price-box">
+          <span id="detail-price" class="detail-price"></span>
+          <span id="detail-change" class="detail-change"></span>
+        </div>
+        <button id="btn-detail-close" class="btn btn-sm" type="button" aria-label="关闭">✕</button>
+        <!-- range 标签放头部 flex 内：竖屏换行独占一行（模型名下方），横屏并入模型名右侧（见 CSS order 控制） -->
+        <div id="range-tabs" role="tablist"></div>
+      </div>
+      <div id="chart-container"></div>
+      <div id="detail-stats"></div>
+    </section>
+  </div>
+
+  <!-- 说明弹窗：内容来自 GET /api/manual（服务端读取 manual.md 转 HTML） -->
+  <div id="manual-overlay" hidden>
+    <div id="manual-backdrop"></div>
+    <section id="manual-panel" role="dialog" aria-modal="true" aria-labelledby="manual-title">
+      <div id="manual-header">
+        <h2 id="manual-title">说明</h2>
+        <button id="btn-manual-close" class="btn btn-sm" type="button" aria-label="关闭">✕</button>
+      </div>
+      <div id="manual-body" class="manual-body"></div>
+    </section>
+  </div>
+</body>
+</html>

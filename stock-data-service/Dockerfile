@@ -9,6 +9,12 @@ RUN npm ci --only=production
 # 复制源码
 COPY src/ ./src/
 
+# 复制 dashboard 静态页面
+COPY public/ ./public/
+
+# 复制 dashboard 说明文档
+COPY manual.md ./manual.md
+
 # 暴露端口
 EXPOSE 3210
 

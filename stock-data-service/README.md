@@ -10,6 +10,9 @@ Ark 模型股票数据服务 - 独立的后端服务，提供价格数据的定�
 - ✅ Redis 持久化存储（AOF + RDB 双保障）
 - ✅ 最近 7 天价格历史查询
 - ✅ 批量查询多个模型价格
+- ✅ Dashboard 可视化页面（同源托管，根路径 `/` 直接访问）：模型走势卡片网格 + 点击进入 Lightweight Charts 大图详情，新野兽派设计，明暗双主题，响应式适配桌面与移动端
+- ✅ GET /api/models 模型列表（带缓存与上游故障兜底降级）
+- ✅ 响应 gzip 压缩（compression）
 - ✅ IP 限流保护（基于 Redis 存储）
 - ✅ Telegram 失败通知（连续 3 次 API 失败告警）
 - ✅ Docker 一键部署
@@ -77,11 +80,56 @@ docker compose down
 docker compose down -v
 ```
 
+## Dashboard 页面
+
+浏览器访问服务根路径（如 `http://localhost:3210/`）即可打开 dashboard：
+
+- **网格总览**：每个模型一张走势卡片（名称、停滞徽章、现价、最新涨跌幅、SVG 迷你走势线），响应式网格（移动端 1 列 → 桌面最多 4 列）
+- **大图详情**：点击卡片进入，Lightweight Charts v4 大图 + 十字线 tooltip，支持 1 天 / 3 天 / 7 天 / 全部 时间范围切换（纯客户端切片），底部显示区间最高/最低/采样点数
+- **主题**：新野兽派风格，明暗双主题，右上角按钮切换；默认跟随系统偏好，手动切换后持久化到 localStorage
+- **自动刷新**：每 5 分钟（与同步周期一致），支持手动刷新；页面切回前台时超期自动补拉
+
 ## API 接口
+
+### GET /api/models
+
+dashboard 模型列表（不限流）。
+
+数据来源：上游行情 `stocks[]`（id/modelName/stale/priceCents），Redis 两级缓存——主缓存 `stock_models:all`（TTL 5 分钟，定时同步时顺带预热）；上游拉取失败时降级返回兜底缓存 `stock_models:lastgood`（TTL 24 小时）并在响应中标记 `staleCache: true`；两级均缺失时返回 500。
+
+**响应：**
+```json
+{
+  "success": true,
+  "data": {
+    "models": [
+      {"id": 2239, "name": "gpt-5", "stale": false, "price": 99.5}
+    ],
+    "count": 17,
+    "cachedAt": 1758350000
+  }
+}
+```
+
+字段说明：`stale` 为 `true` 表示行情停滞（无 tick）；`price` 为现价（代币，2 位小数）；`cachedAt` 为缓存写入时间（秒）；`staleCache` 仅在返回兜底缓存时出现。
+
+### GET /api/manual
+
+dashboard 说明（不限流）。内容来自服务根目录的 `manual.md`（Markdown 编写，服务端转为 HTML 返回）：文件不存在或解析失败返回空字符串（前端显示「暂无说明」）；带 mtime 缓存，修改文件后无需重启服务即可生效。Docker 部署时该文件以只读卷挂载进容器，直接编辑宿主机上的 `manual.md` 即可。
+
+**响应：**
+```json
+{
+  "success": true,
+  "data": {
+    "content": "<h1>说明</h1>\n<ul>\n<li>示例条目</li>\n</ul>"
+  }
+}
+```
 
 ### POST /api/prices/batch
 
-批量查询多个模型的价格历史（主键为 stockId）
+批量查询多个模型的价格历史（主键为 stockId，不限流，供 dashboard 页面调用）。
 
 **请求：**
 ```json
@@ -187,6 +235,8 @@ docker compose down -v
 
 > **修改配置**：如需自定义可选配置，请直接修改 `docker-compose.yml` 文件中的对应值。
 
+**Dashboard 说明（非环境变量）：** 说明弹窗内容来自服务根目录的 `manual.md`（Markdown），详见 `GET /api/manual` 接口说明。本地/源码部署直接编辑该文件即可（mtime 缓存，改完即生效）；Docker 部署时该文件以只读卷挂载进容器，同样直接编辑、无需重启。
+
 ### Cron 表达式示例
 
 ```
@@ -210,8 +260,14 @@ docker compose down -v
 - Key: `stock_ids:all`
 - TTL: 1小时
 
+**dashboard 模型列表（String）：**
+- Key: `stock_models:all` - 主缓存（值含 models/count/cachedAt）
+- TTL: 5分钟（定时同步时顺带预热）
+- Key: `stock_models:lastgood` - 上游故障兜底缓存（最后可用快照）
+- TTL: 24小时
+
 **限流计数器（基于 Redis）：**
-- Key: `ratelimit:{ip}`
+- Key: `ratelimit:{ip}` - 严格限流（/api/models、/api/prices/batch 与 /health 除外）
 - TTL: 动态（根据窗口大小）
 
 **失败通知计数器：**
@@ -310,11 +366,20 @@ curl -X POST http://localhost:3210/api/prices/batch \
   -H "Content-Type: application/json" \
   -d '{"stockIds":[1,2],"days":7}'
 
+# dashboard 模型列表
+curl http://localhost:3210/api/models
+
+# dashboard 页面
+curl -I http://localhost:3210/
+
 # 手动触发同步
 curl -X POST http://localhost:3210/api/sync
 
-# 限流测试（快速连续5次请求，应触发限流）
+# 限流测试（快速连续5次请求，应触发严格限流）
 for i in {1..5}; do curl http://localhost:3210/api/stock-ids & done
+
+# dashboard 数据端点不限流（35 次请求应全部 200）
+for i in $(seq 1 35); do curl -s -o /dev/null -w "%{http_code} " http://localhost:3210/api/models; done; echo
 ```
 
 ### Redis 数据验证
@@ -350,10 +415,11 @@ stock-data-service/
 │   ├── services/
 │   │   ├── arkGameApi.js       # Ark Game API 封装
 │   │   ├── priceStorage.js     # 价格数据存储
+│   │   ├── modelsService.js    # dashboard 模型列表（缓存/上游拉取/兜底降级）
 │   │   ├── syncScheduler.js    # 定时同步任务
 │   │   └── notificationService.js  # 通知服务
 │   ├── middleware/
-│   │   └── rateLimit.js        # 限流中间件
+│   │   └── rateLimit.js        # 双档限流（严格 + dashboard 宽松）
 │   ├── routes/
 │   │   └── api.js              # HTTP 路由
 │   ├── utils/
@@ -361,6 +427,10 @@ stock-data-service/
 │   │   ├── responseHelper.js   # API 响应助手
 │   │   └── timeUtils.js        # 时间工具
 │   └── app.js                  # 应用入口
+├── public/                     # dashboard 静态页面（无构建）
+│   ├── index.html
+│   ├── style.css
+│   └── app.js
 ├── Dockerfile
 ├── docker-compose.yml
 ├── redis.conf                  # Redis 持久化配置
@@ -381,6 +451,8 @@ stock-data-service/
 6. **CORS 跨域**：默认允许所有域名访问（`Access-Control-Allow-Origin: *`）
 7. **Trust Proxy**：如果服务运行在反向代理（如 Nginx、Cloudflare）后面，建议设置 `EXPRESS_TRUST_PROXY=true` 以正确获取客户端真实 IP（用于限流）
 8. **主键**：全部使用 stockId（数字），不用 modelName
+9. **前端图表库**：Lightweight Charts v4.0.1 通过 jsDelivr CDN 引入（`index.html`），升级直接改引用地址的版本号
+10. **限流策略**：单档限流（默认 60 秒 2~3 次），dashboard 数据端点（/api/models、/api/prices/batch）与健康检查由 skip 跳过、不限流
 
 ## 故障排查
 

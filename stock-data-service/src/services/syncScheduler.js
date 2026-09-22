@@ -2,6 +2,7 @@ const { CronJob } = require("cron");
 const redis = require("../config/redis");
 const arkGameApi = require("./arkGameApi");
 const priceStorage = require("./priceStorage");
+const modelsService = require("./modelsService");
 const notificationService = require("./notificationService");
 const config = require("../config/env");
 const logger = require("../utils/logger");
@@ -49,6 +50,9 @@ class SyncScheduler {
         logger.log("定时同步", "API 返回数据为空");
         return;
       }
+
+      // 顺带预热 dashboard 模型列表缓存（与同步同节奏，内部静默失败不影响主流程）
+      await modelsService.warmFromStocks(stocks);
 
       // 1. 过滤活跃模型（stale === false），n = 活跃数量
       //    stale=false 表示活跃/新鲜（本轮有 tick）；stale=true 表示陈旧（无 tick）

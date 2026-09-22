@@ -1,12 +1,33 @@
 const express = require('express');
 const priceStorage = require('../services/priceStorage');
+const modelsService = require('../services/modelsService');
 const syncScheduler = require('../services/syncScheduler');
 const arkGameApi = require('../services/arkGameApi');
+const manualService = require('../services/manualService');
 const { sendSuccess, sendError, asyncHandler } = require('../utils/responseHelper');
 const { DATA_RETENTION_DAYS } = require('../constants/business');
 const logger = require('../utils/logger');
 
 const router = express.Router();
+
+/**
+ * GET /api/models
+ * dashboard 模型列表（id/名称/停滞标志/现价，带两级缓存与兜底降级）
+ * 注意：宽松限流在 app 层对 /api/models 与 /api/prices/batch 生效，路由内不挂 limiter
+ */
+router.get('/models', asyncHandler('/api/models', async (req, res) => {
+  const data = await modelsService.getModels();
+  sendSuccess(res, data);
+}));
+
+/**
+ * GET /api/manual
+ * dashboard 说明（不限流，内容来自仓库根目录 manual.md，Markdown 转 HTML）
+ */
+router.get('/manual', asyncHandler('/api/manual', async (req, res) => {
+  const html = await manualService.getManualHtml();
+  sendSuccess(res, { content: html });
+}));
 
 /**
  * POST /api/prices/batch

@@ -4,6 +4,12 @@ const redis = require('../config/redis');
 const config = require('../config/env');
 const REDIS_KEYS = require('../constants/redisKeys');
 
+/**
+ * dashboard 专用端点（app 级中间件中 req.path 为完整路径，含 /api 前缀），
+ * 这些接口不再限流，供 dashboard 页面自由调用
+ */
+const DASHBOARD_PATHS = ['/api/models', '/api/prices/batch', '/api/manual'];
+
 const limiter = rateLimit({
   store: new RedisStore({
     sendCommand: (...args) => redis.call(...args),
@@ -17,8 +23,8 @@ const limiter = rateLimit({
     success: false,
     error: 'Too many requests, please try again later.'
   },
-  // 跳过健康检查接口
-  skip: (req) => req.path === '/health',
+  // 跳过健康检查接口与 dashboard 数据端点（/api/models、/api/prices/batch、/api/manual）
+  skip: (req) => req.path === '/health' || DASHBOARD_PATHS.includes(req.path),
 });
 
 module.exports = limiter;

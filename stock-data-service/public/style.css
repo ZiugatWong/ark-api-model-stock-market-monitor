@@ -1,0 +1,709 @@
+/* ============================================================
+ * Ark 模型股票 Dashboard — 新野兽派（Neo-brutalism）
+ * 明暗双主题：默认暗色（html.theme-dark），亮色以 html.theme-light 覆盖
+ * ============================================================ */
+
+/* ---------- 主题变量 ---------- */
+html.theme-dark {
+  --bg: #1a1a1a;               /* 页面背景 */
+  --surface: #242424;          /* 卡片/详情面板 */
+  --surface-2: #2e2e2e;        /* 头部/二级面板 */
+  --border: #f5f5f5;           /* 粗边框（暗色用亮边） */
+  --border-width: 3px;
+  --text: #f5f5f5;
+  --text-muted: #a3a3a3;
+  --accent: #ffd43b;           /* 高饱和黄：按钮/激活标签/强调 */
+  --accent-text: #111111;      /* 强调色上的文字 */
+  --up: #f55454;               /* 涨红（语义色两主题固定） */
+  --down: #00a854;             /* 跌绿 */
+  --flat: #a3a3a3;             /* 持平/无数据 */
+  --stale: #ff8787;            /* 停滞徽章 */
+  --stale-bg: #3d1f1f;
+  --banner-danger: #c92a2a;    /* 错误横条 */
+  --chart-bg: #242424;         /* 图表容器背景（与 app.js CHART_COLORS 对齐） */
+  --backdrop: rgba(0, 0, 0, 0.7);
+}
+
+html.theme-light {
+  --bg: #fdf6e9;               /* 米白暖底 */
+  --surface: #ffffff;
+  --surface-2: #f3ede0;
+  --border: #111111;
+  --border-width: 3px;
+  --text: #111111;
+  --text-muted: #555555;
+  --accent: #ffd43b;
+  --accent-text: #111111;
+  --up: #f55454;
+  --down: #00a854;
+  --flat: #777777;
+  --stale: #e03131;
+  --stale-bg: #ffe3e3;
+  --banner-danger: #ffc9c9;
+  --chart-bg: #ffffff;
+  --backdrop: rgba(17, 17, 17, 0.55);
+}
+
+/* ---------- 基础 ---------- */
+* {
+  box-sizing: border-box;
+}
+
+/* 修复：UA 的 [hidden]{display:none} 会被元素的 display 声明覆盖（如 .badge、#error-banner），
+   此处强制兜底，保证 hidden 属性始终生效 */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto,
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* ---------- 顶部栏 ---------- */
+#topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  background: var(--surface-2);
+  border-bottom: var(--border-width) solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* 标题 + 更新时间纵向排列（更新时间始终在标题下方） */
+.topbar-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.topbar-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.last-updated {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ---------- 按钮（brutalist 按压感） ---------- */
+.btn {
+  border: var(--border-width) solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 800;
+  font-size: 14px;
+  padding: 8px 16px;
+  cursor: pointer;
+  box-shadow: 4px 4px 0 var(--border);
+  transition: transform 0.06s ease, box-shadow 0.06s ease;
+}
+
+/* hover 悬浮仅限真实指针设备：移动端 tap 后 :hover 会粘滞（无"移开"动作），
+   导致按钮松手后回弹到抬高 2px 的 hover 位并停住，看起来比初始位置高 */
+@media (hover: hover) {
+  .btn:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--border);
+  }
+}
+
+.btn:active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--border);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 4px 4px 0 var(--border);
+}
+
+.btn-accent {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+/* 图标按钮：正方形，图标居中（刷新/主题切换等） */
+.btn-icon {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* ---------- 错误横条 ---------- */
+#error-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 20px;
+  padding: 10px 14px;
+  background: var(--banner-danger);
+  border: var(--border-width) solid var(--border);
+  font-weight: 700;
+}
+
+html.theme-light #error-banner {
+  color: #111111;
+}
+
+#error-banner[hidden] {
+  display: none;
+}
+
+#error-text {
+  flex: 1;
+}
+
+/* ---------- 卡片网格 ---------- */
+#grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  padding: 20px;
+  max-width: 1560px;
+  margin: 0 auto;
+}
+
+@media (min-width: 640px) {
+  #grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (min-width: 1024px) {
+  #grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (min-width: 1440px) {
+  #grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ---------- 卡片 ---------- */
+.card {
+  border: var(--border-width) solid var(--border);
+  background: var(--surface);
+  box-shadow: 6px 6px 0 var(--border);
+  padding: 14px 16px 12px;
+  cursor: pointer;
+  transition: transform 0.06s ease, box-shadow 0.06s ease;
+}
+
+@media (hover: hover) {
+  .card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 8px 8px 0 var(--border);
+  }
+}
+
+.card:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--border);
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.card-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+/* 价格行：价格在左，收藏星标按钮靠右（位于 stale 徽章正下方） */
+.card-price-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-price {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 收藏星标：无边框纯图标（视觉上不与 brutalist 卡片抢戏），已收藏着强调黄 */
+.fav-btn {
+  margin-left: auto;
+  border: none;
+  background: none;
+  padding: 0 2px;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: transform 0.06s ease, color 0.06s ease;
+}
+
+.fav-btn:hover {
+  transform: scale(1.15);
+}
+
+.fav-btn:active {
+  transform: scale(0.9);
+}
+
+.fav-btn.faved {
+  color: var(--accent);
+}
+
+.card-change {
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-change.up   { color: var(--up); }
+.card-change.down { color: var(--down); }
+.card-change.flat { color: var(--flat); }
+
+.card-spark {
+  height: 64px;
+  margin-top: 6px;
+  border-top: 2px solid var(--border);
+  padding-top: 6px;
+}
+
+.card-spark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.spark-line {
+  fill: none;
+  stroke-width: 2;
+}
+
+.spark-line.rising { stroke: var(--up); }
+.spark-line.falling { stroke: var(--down); }
+.spark-line.stale-line { stroke: var(--flat); }
+
+.spark-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ---------- 徽章（两态常显：正常/停滞） ---------- */
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border: 2px solid var(--border);
+  letter-spacing: 0.05em;
+  flex: none;
+}
+
+.badge-ok {
+  color: var(--down);
+  background: transparent;
+}
+
+.badge-stale {
+  color: var(--stale);
+  background: var(--stale-bg);
+}
+
+.badge-warn {
+  color: #111111;
+  background: var(--accent);
+}
+
+/* ---------- 空态/加载态块 ---------- */
+.state-block {
+  grid-column: 1 / -1;
+  border: var(--border-width) solid var(--border);
+  background: var(--surface);
+  padding: 48px 24px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+
+/* ---------- 详情遮罩 ---------- */
+#detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#detail-overlay[hidden] {
+  display: none;
+}
+
+#detail-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--backdrop);
+}
+
+#detail-panel {
+  position: relative;
+  width: min(1100px, calc(100vw - 32px));
+  /* vh 兜底；dvh 为动态视口高（扣除移动浏览器地址栏/工具栏），
+     否则部分移动端横屏下面板高于真实可视区 */
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  /* flex 纵向布局：头部/标签/统计为固定块，图表弹性占满剩余空间。
+     横屏等矮视口下不再溢出，走势图打开即在可视区内，无需滚动 */
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--surface);
+  border: var(--border-width) solid var(--border);
+  padding: 18px 20px 16px;
+}
+
+/* ---------- 详情头部 ---------- */
+/* flex-wrap：竖屏时让 range-tabs（flex-basis:100%）换行独占一行；
+   其余子项不带 order，排在其前。横屏矮视口时 range-tabs 的 order 改为 0 并入同一行 */
+#detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.detail-title-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+#detail-name {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  /* 不超宽时单行原样；超宽时缩字号并 clamp 到 2 行（仍溢出则第 2 行尾省略）。
+     模型名多为无空格长串（如 model-x-gpt4-turbo），须允许任意断行 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  transition: font-size 0.1s ease;
+}
+
+/* 竖屏手机等窄视口：模型名缩字号并放宽到 2 行 */
+@media (max-width: 639px) {
+  #detail-name {
+    font-size: 18px;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* 头部该行元素改为顶部对齐，两行名字不与价格/按钮错位 */
+  #detail-header,
+  .detail-title-box {
+    align-items: flex-start;
+  }
+}
+
+.detail-price-box {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex: none;
+}
+
+.detail-price {
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-change {
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-change.up   { color: var(--up); }
+.detail-change.down { color: var(--down); }
+.detail-change.flat { color: var(--flat); }
+
+/* ---------- 时间范围标签 ---------- */
+/* range-tabs 是 #detail-header 的 flex 子项：
+   横屏（矮视口）在模型名右侧成一行；竖屏 wrap 换行后用 order+偏移独占一行，避免与图标/价格挤在一行 */
+#range-tabs {
+  order: 1;
+  flex-basis: 100%;
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  margin-bottom: 2px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+@media (max-height: 500px) {
+  #range-tabs {
+    /* 横屏：取消独占一行（basis 回到 auto），置于标题框（DOM 首位，order 同为 0）之后 */
+    order: 0;
+    flex-basis: auto;
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+
+  /* 价格框与关闭按钮推到 tabs 之后，保持「模型名 → 跨度按钮 → 价格 → 关闭」顺序 */
+  .detail-price-box,
+  #btn-detail-close {
+    order: 1;
+  }
+
+  /* 横屏下宽度同样紧张：模型名允许 2 行 */
+  #detail-name {
+    font-size: 16px;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    min-width: 0;
+    flex: 1;
+  }
+
+  #detail-header,
+  .detail-title-box {
+    align-items: flex-start;
+  }
+}
+
+.range-tab {
+  flex: none;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.range-tab.active {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+/* ---------- 图表容器 ---------- */
+#chart-container {
+  /* flex-basis 60vh：桌面端图表保持原有高度感；
+     矮视口（横屏手机）下面板受 max-height 限制，flex-shrink 自动压缩图表 */
+  flex: 1 1 60vh;
+  min-height: 160px;
+  border: 2px solid var(--border);
+  background: var(--chart-bg);
+  position: relative;
+}
+
+#chart-container .chart-tooltip {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+  box-shadow: 4px 4px 0 var(--border);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- 详情统计 ---------- */
+#detail-stats {
+  display: flex;
+  gap: 24px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 2px solid var(--border);
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 700;
+  flex-wrap: wrap;
+}
+
+#detail-stats .stat-value {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+/* ---------- 说明弹窗 ---------- */
+#manual-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#manual-overlay[hidden] {
+  display: none;
+}
+
+#manual-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--backdrop);
+}
+
+#manual-panel {
+  position: relative;
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: var(--border-width) solid var(--border);
+  padding: 18px 20px 16px;
+}
+
+#manual-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+#manual-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  flex: 1;
+  min-width: 0;
+}
+
+/* 说明正文：服务端配置的 HTML，直接渲染 */
+.manual-body {
+  border-top: 2px solid var(--border);
+  padding-top: 12px;
+  font-size: 14px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.manual-body > :first-child {
+  margin-top: 0;
+}
+
+.manual-body > :last-child {
+  margin-bottom: 0;
+}
+
+.manual-body a {
+  color: var(--text);
+  font-weight: 800;
+  text-decoration: underline;
+}
+
+.manual-body code {
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+  padding: 1px 5px;
+  font-weight: 700;
+}
+
+.manual-body ul,
+.manual-body ol {
+  padding-left: 22px;
+}
+
+.manual-empty {
+  color: var(--text-muted);
+  font-weight: 700;
+  text-align: center;
+  padding: 16px 0;
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 639px) {
+  #topbar {
+    gap: 10px;
+    padding: 10px 14px;
+  }
+
+  .topbar-title {
+    font-size: 18px;
+  }
+
+  #grid {
+    gap: 14px;
+    padding: 14px;
+  }
+
+  #detail-panel {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
+    padding: 14px;
+  }
+}
+
+@media (min-width: 1024px) {
+  #detail-panel {
+    width: min(1200px, calc(100vw - 48px));
+  }
+}

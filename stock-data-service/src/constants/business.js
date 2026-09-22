@@ -16,6 +16,8 @@ const BUSINESS_CONSTANTS = {
   // 缓存过期时间
   CACHE_TTL: {
     MODELS_LIST: 3600,        // 模型列表缓存：1小时
+    MODELS_DASHBOARD: 300,    // dashboard 模型列表：5分钟（与同步周期一致）
+    MODELS_LASTGOOD: 86400,   // 上游故障时的最后可用快照：24小时
     FAILURE_COUNT: 3600,      // 失败计数：1小时
     ERROR_DETAILS: 3600       // 错误详情：1小时
   }
