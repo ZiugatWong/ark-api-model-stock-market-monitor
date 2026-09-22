@@ -708,7 +708,7 @@
       this._priceLines = {
         highLine: this.series.createPriceLine({
           price: max,
-          color: "#00A854",
+          color: "#F55454",
           lineWidth: 1,
           lineStyle: 2,
           axisLabelVisible: true,
@@ -716,7 +716,7 @@
         }),
         lowLine: this.series.createPriceLine({
           price: min,
-          color: "#F55454",
+          color: "#00A854",
           lineWidth: 1,
           lineStyle: 2,
           axisLabelVisible: true,
