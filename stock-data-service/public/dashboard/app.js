@@ -228,19 +228,34 @@
   };
 
   /* ---------------- Api ---------------- */
+  const FETCH_TIMEOUT_MS = 30 * 1000;
+
   async function _fetchJson(url, opts) {
-    const res = await fetch(url, opts);
-    let body = null;
+    // 超时保护：请求挂死时 abort，避免 run() 永久卡在 loading
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
-      body = await res.json();
-    } catch (e) {
-      /* 非 JSON 响应 */
+      const res = await fetch(url, { ...opts, signal: controller.signal });
+      let body = null;
+      try {
+        body = await res.json();
+      } catch (e) {
+        /* 非 JSON 响应 */
+      }
+      if (!res.ok || !body || body.success !== true) {
+        const msg = body && body.error ? body.error : `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+      return body.data;
+    } catch (err) {
+      // abort 后 fetch 抛的是 AbortError（name 为 "AbortError"），转成可读文案
+      if (err.name === "AbortError") {
+        throw new Error("请求超时（30 秒）");
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
-    if (!res.ok || !body || body.success !== true) {
-      const msg = body && body.error ? body.error : `HTTP ${res.status}`;
-      throw new Error(msg);
-    }
-    return body.data;
   }
 
   function fetchModels() {
@@ -909,16 +924,22 @@
   }
 
   function startAutoRefresh() {
-    State.timer = setInterval(run, REFRESH_INTERVAL_MS);
-    // 浏览器后台标签节流补偿：回到可见且超期则立即补拉
+    // 后台标签页暂停定时刷新，回前台重启；超期则立即补拉
+    const restartTimer = () => {
+      clearInterval(State.timer);
+      State.timer = setInterval(run, REFRESH_INTERVAL_MS);
+    };
     document.addEventListener("visibilitychange", () => {
-      if (
-        document.visibilityState === "visible" &&
-        Date.now() - State.lastUpdated > REFRESH_INTERVAL_MS
-      ) {
-        run({ isAuto: true });
+      if (document.visibilityState === "visible") {
+        if (Date.now() - State.lastUpdated > REFRESH_INTERVAL_MS) {
+          run({ isAuto: true });
+        }
+        restartTimer();
+      } else {
+        clearInterval(State.timer);
       }
     });
+    restartTimer();
   }
 
   /* ---------------- App ---------------- */
