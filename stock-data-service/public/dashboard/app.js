@@ -895,8 +895,14 @@
       // 详情打开时同步更新
       Detail.updateData();
     } catch (err) {
-      // 刷新失败保留旧数据，仅弹横条
+      // 刷新失败保留旧数据，仅弹横条；文案恢复为上一次成功的时间（从未成功过则不显示时间）
       showError(`数据加载失败：${err.message}`);
+      if (State.lastUpdated > 0) {
+        document.getElementById("last-updated").textContent =
+          `更新时间： ${formatTimestamp(Math.floor(State.lastUpdated / 1000), "full")}`;
+      } else {
+        document.getElementById("last-updated").textContent = "暂无数据";
+      }
     } finally {
       State.loading = false;
     }
