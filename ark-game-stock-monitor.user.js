@@ -2,7 +2,7 @@
 // @name         Ark API 模型股市监控
 // @description  Ark 模型股市数据聚合分析与价格变动通知（game.arkengine.me）
 // @namespace    http://tampermonkey.net/
-// @version      1.0.10
+// @version      1.0.11
 // @author       ziugat
 // @license      GPL-3.0
 // @homepage     https://github.com/ZiugatWong/ark-api-model-stock-market-monitor
@@ -6605,7 +6605,8 @@
         const netRounded = this.tradeNetRounded(t);
         const grossAmount = Utils.formatThousands(grossRounded);
         const feeAmount = Utils.formatThousands(feeRounded);
-        const balanceChangeSign = netRounded < 0 ? "-" : netRounded > 0 ? "+" : "";
+        const balanceChangeSign =
+          netRounded < 0 ? "-" : netRounded > 0 ? "+" : "";
         const balanceChange =
           balanceChangeSign + Utils.formatThousands(Math.abs(netRounded));
 
@@ -6630,8 +6631,7 @@
         link.addEventListener("click", () => {
           const stockId = Number(link.dataset.stockId);
           const tradeId = link.dataset.tradeId;
-          const name =
-            (stockId != null && data.idToModel[stockId]) || "该模型";
+          const name = (stockId != null && data.idToModel[stockId]) || "该模型";
           if (!confirm(`确认删除 ${name} 的这条交易记录？删除后不可恢复。`))
             return;
           if (DataProcessor.deleteTrade(stockId, tradeId)) {
