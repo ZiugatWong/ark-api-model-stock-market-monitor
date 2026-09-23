@@ -1,6 +1,6 @@
 # Stock Data Service
 
-Ark 模型股票数据服务 - 独立的后端服务，提供价格数据的定时同步和 HTTP API 查询。
+Ark 模型股市数据服务 - 独立的后端服务，提供价格数据的定时同步和 HTTP API 查询。
 
 对接站点：[game.arkengine.me](https://game.arkengine.me)（原股市功能已从 windhub.cc 迁移到此站点）。
 
@@ -50,7 +50,7 @@ cp .env.example .env
 **获取 Cookie**：网站的会话 Cookie 设置了 `HttpOnly`，无法通过 `document.cookie` 读取，需从实际请求中复制：
 
 1. 打开开发者工具（F12），切换到 **Network（网络）** 面板
-2. 刷新页面或在模型股票页面触发一次请求，找到对 `/api/stock` 的请求
+2. 刷新页面或在模型股市页面触发一次请求，找到对 `/api/stock` 的请求
 3. 在该请求的 **Request Headers（请求标头）** 中找到 `cookie` 字段，复制其完整值（通常包含 `ptd_session`）
 
 > 提示：也可以在请求上右键选择 “Copy → Copy as cURL”，从命令中提取 `cookie` 的值。

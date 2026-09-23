@@ -1,7 +1,7 @@
 {
   "name": "ark-api-model-stock-data-service",
   "version": "1.0.1",
-  "description": "Ark 模型股票数据服务",
+  "description": "Ark 模型股市数据服务",
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",

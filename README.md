@@ -1,5 +1,5 @@
 <div align="center">
-<h1>Ark 模型股票监控</h1>
+<h1>Ark 模型股市监控</h1>
 <a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Greasyfork Version" src="https://img.shields.io/greasyfork/v/582321?style=flat-square"></a>
 <a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Downloads Total" src="https://img.shields.io/greasyfork/dt/582321?style=flat-square&color=green"></a>
 <a href="https://greasyfork.org/zh-CN/scripts/582321"><img alt="Downloads Per Day" src="https://img.shields.io/greasyfork/dd/582321?style=flat-square&color=orange"></a>
@@ -25,7 +25,7 @@
 ## 安装
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展
-2. 点击 [Ark 模型股市监控脚本](https://greasyfork.org/zh-CN/scripts/582321)进入 Greasy Fork 并安装脚本
+2. 点击 [Ark 模型股市监控脚本](https://greasyfork.org/zh-CN/scripts/582321) 进入 Greasy Fork 并安装脚本
 3. 访问 [game.arkengine.me](https://game.arkengine.me)
 4. 点击浏览器工具栏的 Tampermonkey 图标，选择相应面板打开
 

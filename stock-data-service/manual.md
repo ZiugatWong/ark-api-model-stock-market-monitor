@@ -1,4 +1,4 @@
-&emsp;&emsp;本行情服务属于 [https://github.com/ZiugatWong/ark-api-model-stock-market-monitor](https://github.com/ZiugatWong/ark-api-model-stock-market-monitor) 的配套服务，如果佬觉得好用，可以顺手点个 star ～
+&emsp;&emsp;本行情服务属于[Ark 模型股市监控脚本](https://github.com/ZiugatWong/ark-api-model-stock-market-monitor)的配套服务，如果觉得好用，可以顺手点个 star ~
 
 ### 数据和星标
 
