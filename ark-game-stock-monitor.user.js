@@ -930,6 +930,21 @@
       Storage.save(data);
       return record;
     },
+
+    // 删除一条本地交易记录（按 stockId + 记录 id 定位）
+    deleteTrade(stockId, tradeId) {
+      if (!stockId || tradeId == null) return false;
+      const data = Storage.load();
+      const list = data.tradeHistory || {};
+      const existing = list[stockId] || [];
+      const next = existing.filter((t) => String(t.id) !== String(tradeId));
+      if (next.length === existing.length) return false; // 未找到
+      if (next.length > 0) list[stockId] = next;
+      else delete list[stockId]; // 该模型已无记录，移除键
+      data.tradeHistory = list;
+      Storage.save(data);
+      return true;
+    },
   };
 
   // ==================== 通知 ====================
@@ -1707,6 +1722,13 @@
       color: var(--ark-label);
       font-size: 12px;
     }
+    .ark-trades-profit {
+      margin-left: auto;
+      color: var(--ark-label);
+      font-size: 12px;
+    }
+    .ark-trades-profit .profit-pos { color: #F55454; }
+    .ark-trades-profit .profit-neg { color: #00A854; }
     .ark-trades-note {
       color: var(--ark-muted);
       font-size: 11px;
@@ -1744,6 +1766,12 @@
     }
     .ark-trades-table td.side-buy { color: #00A854; }
     .ark-trades-table td.side-sell { color: #F55454; }
+    .ark-trades-table a.ark-trade-delete {
+      color: #F55454;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .ark-trades-table a.ark-trade-delete:hover { text-decoration: underline; }
 
     .ark-market-entrance {
       display: flex;
@@ -3234,6 +3262,26 @@
       }
 
       return { stats, priceLines };
+    }
+
+    // 仅按当前本地交易记录重绘指定模型图表上的买卖点标记（不重拉价格数据）
+    refreshTradeMarkers(stockId) {
+      for (const panelInfo of this.panels.values()) {
+        if (Number(panelInfo.stockId) !== Number(stockId)) continue;
+        const instance = this.chartInstances.get(panelInfo.chartInstance);
+        const series = instance?.series;
+        if (!series) continue;
+        const data = Storage.load();
+        const chartData = Chart.convertToChartData(
+          data.priceData?.[stockId] || [],
+        );
+        const trades = (data.tradeHistory?.[stockId] || []).filter(
+          (t) => chartData.length > 0 && t.created_at >= chartData[0].time,
+        );
+        series.setMarkers(
+          trades.length > 0 ? Chart.convertToMarkers(trades, chartData) : [],
+        );
+      }
     }
 
     async showChartPanel(stockId) {
@@ -5070,6 +5118,7 @@
                 <option value="">全部</option>
               </select>
               <span class="ark-trades-count" id="ark-trades-count"></span>
+              <span class="ark-trades-profit" id="ark-trades-profit"></span>
             </div>
             <div class="ark-table-wrap" id="ark-trades-table-wrap">
               <div class="ark-empty-hint">暂无交易记录</div>
@@ -5093,9 +5142,12 @@
       this._tradesPanel
         .querySelector("#ark-trades-model-select")
         .addEventListener("change", () => {
-          UIRenderers.renderTradesTable(
-            this._tradesPanel.querySelector("#ark-trades-model-select").value,
-          );
+          const modelKey = this._tradesPanel.querySelector(
+            "#ark-trades-model-select",
+          ).value;
+          UIRenderers.renderTradesTable(modelKey);
+          UIRenderers.updateTradesCount(modelKey);
+          UIRenderers.updateTradesProfit(modelKey);
         });
 
       return this._tradesPanel;
@@ -6520,47 +6572,113 @@
       trades.sort((a, b) => b.created_at - a.created_at);
 
       let html = `<table class="ark-trades-table">
-        <thead><tr><th>交易时间</th><th>模型</th><th>买卖方向</th><th>价格</th><th>股数</th><th>成交额</th><th>手续费</th><th>余额变化</th></tr></thead><tbody>`;
+        <thead><tr><th>交易时间</th><th>模型</th><th>买卖方向</th><th>价格</th><th>股数</th><th>成交额</th><th>手续费</th><th>余额变化</th><th>操作</th></tr></thead><tbody>`;
 
       for (const t of trades) {
         const timeStr = TimeUtils.formatSecondsTimestamp(t.created_at, "short");
         const modelName =
           (t.stockId != null && data.idToModel[t.stockId]) || "未知模型";
         const sideDisplay = t.side === "buy" ? "买入" : "卖出";
-        const grossAmount = t.gross.toFixed(2);
-        const feeAmount = t.fee.toFixed(2);
-        const balanceChangeSign = t.side === "buy" ? "-" : "+";
-        const balanceChange = balanceChangeSign + Math.abs(t.net).toFixed(2);
+        // 先取整再计算，保证余额变化与展示的成交额、手续费严格对应
+        const grossRounded = Math.round(t.gross);
+        const feeRounded = Math.round(t.fee);
+        const netRounded = this.tradeNetRounded(t);
+        const grossAmount = Utils.formatThousands(grossRounded);
+        const feeAmount = Utils.formatThousands(feeRounded);
+        const balanceChangeSign = netRounded < 0 ? "-" : netRounded > 0 ? "+" : "";
+        const balanceChange =
+          balanceChangeSign + Utils.formatThousands(Math.abs(netRounded));
 
         html += `<tr>
           <td>${timeStr}</td>
           <td>${Utils.escapeHtml(modelName)}</td>
           <td class="side-${t.side}">${sideDisplay}</td>
           <td>${t.price.toFixed(2)}</td>
-          <td>${t.shares}</td>
+          <td>${Utils.formatThousands(t.shares)}</td>
           <td>${grossAmount}</td>
           <td>${feeAmount}</td>
           <td class="side-${t.side}">${balanceChange}</td>
+          <td><a href="javascript:void(0)" class="ark-trade-delete" data-stock-id="${Utils.escapeHtml(
+            String(t.stockId),
+          )}" data-trade-id="${Utils.escapeHtml(String(t.id))}">删除</a></td>
         </tr>`;
       }
       html += "</tbody></table>";
       wrap.innerHTML = html;
+
+      wrap.querySelectorAll("a.ark-trade-delete").forEach((link) => {
+        link.addEventListener("click", () => {
+          const stockId = Number(link.dataset.stockId);
+          const tradeId = link.dataset.tradeId;
+          const name =
+            (stockId != null && data.idToModel[stockId]) || "该模型";
+          if (!confirm(`确认删除 ${name} 的这条交易记录？删除后不可恢复。`))
+            return;
+          if (DataProcessor.deleteTrade(stockId, tradeId)) {
+            this.refreshTradesPanel();
+            ChartManager.getInstance().refreshTradeMarkers(stockId);
+          }
+        });
+      });
+    },
+
+    // 更新交易记录条数：modelKey 为 "" 时统计全部模型，否则只统计该模型
+    updateTradesCount(modelKey) {
+      const panel = UIPanels._tradesPanel;
+      if (!panel) return;
+      const countEl = panel.querySelector("#ark-trades-count");
+      if (!countEl) return;
+      const history = Storage.load().tradeHistory || {};
+      let total = 0;
+      if (modelKey) {
+        total = (history[modelKey] || []).length;
+      } else {
+        for (const sid of Object.keys(history))
+          total += (history[sid] || []).length;
+      }
+      countEl.textContent = `共 ${total} 条`;
+    },
+
+    // 单笔余额变化：用取整后的成交额、手续费计算，与表格展示口径一致
+    tradeNetRounded(t) {
+      const grossRounded = Math.round(t.gross || 0);
+      const feeRounded = Math.round(t.fee || 0);
+      return t.side === "buy"
+        ? -(grossRounded + feeRounded)
+        : grossRounded - feeRounded;
+    },
+
+    // 更新总收益：按当前范围（全部 / 所选模型）累加每笔取整后的余额变化
+    updateTradesProfit(modelKey) {
+      const panel = UIPanels._tradesPanel;
+      if (!panel) return;
+      const profitEl = panel.querySelector("#ark-trades-profit");
+      if (!profitEl) return;
+      const history = Storage.load().tradeHistory || {};
+      let sum = 0;
+      if (modelKey) {
+        for (const t of history[modelKey] || []) sum += this.tradeNetRounded(t);
+      } else {
+        for (const sid of Object.keys(history))
+          for (const t of history[sid] || []) sum += this.tradeNetRounded(t);
+      }
+      const sign = sum > 0 ? "+" : sum < 0 ? "-" : "";
+      const cls = sum > 0 ? "profit-pos" : sum < 0 ? "profit-neg" : "";
+      profitEl.innerHTML = `总收益：<span class="${cls}">${sign}${Utils.formatThousands(
+        Math.abs(sum),
+      )}</span>`;
     },
 
     // 整体刷新交易记录面板：下拉 + 表格 + 总数统计
     refreshTradesPanel() {
       const panel = UIPanels._tradesPanel;
       if (!panel) return;
-      const data = Storage.load();
-      const history = data.tradeHistory || {};
-      let total = 0;
-      for (const sid of Object.keys(history))
-        total += (history[sid] || []).length;
-      const countEl = panel.querySelector("#ark-trades-count");
-      if (countEl) countEl.textContent = `共 ${total} 条`;
       this.populateTradesModelSelect();
       const select = panel.querySelector("#ark-trades-model-select");
-      this.renderTradesTable(select ? select.value : "");
+      const modelKey = select ? select.value : "";
+      this.updateTradesCount(modelKey);
+      this.updateTradesProfit(modelKey);
+      this.renderTradesTable(modelKey);
     },
   };
 
