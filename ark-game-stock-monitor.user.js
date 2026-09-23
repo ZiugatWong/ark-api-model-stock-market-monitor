@@ -2668,6 +2668,10 @@
     .ark-menu-item-disabled:hover {
       background: none;
     }
+    /* 取消监控：破坏性操作，用红色与交易项区分 */
+    .ark-menu-item-danger {
+      color: #ef4444;
+    }
     .ark-menu-arrow {
       color: var(--ark-muted);
       font-size: 12px;
@@ -6063,7 +6067,7 @@
       }
     },
 
-    // 表头模型名称右键菜单：买入 / 卖出 / 颜色标识（独立二级浮层）
+    // 表头模型名称右键菜单：买入 / 卖出 / 颜色标识（独立二级浮层）/ 取消监控
     showTradeContextMenu(e, stockId, data) {
       // 右击已有菜单：先关旧的，再在新位置重建
       this._closeTradeMenu();
@@ -6077,6 +6081,7 @@
         <div class="ark-menu-item" data-action="buy"><span>买入</span></div>
         <div class="ark-menu-item${hasPosition ? "" : " ark-menu-item-disabled"}" data-action="sell"><span>卖出</span></div>
         <div class="ark-menu-item" data-action="colors"><span>颜色标识</span><span class="ark-menu-arrow">▸</span></div>
+        <div class="ark-menu-item ark-menu-item-danger" data-action="unmonitor"><span>取消监控</span></div>
       `;
       document.body.appendChild(menu);
       this._clampMenuToViewport(menu, e.pageX, e.pageY);
@@ -6097,7 +6102,7 @@
       };
       this._tradeMenuClose = closeMenu;
 
-      // 一级菜单点击：买入/卖出 → 关菜单开面板；颜色标识 → 切换二级浮层
+      // 一级菜单点击：买入/卖出 → 关菜单开面板；颜色标识 → 切换二级浮层；取消监控 → 确认后移除
       menu.addEventListener("click", (ev) => {
         const item = ev.target.closest(".ark-menu-item");
         if (!item || item.classList.contains("ark-menu-item-disabled")) return;
@@ -6111,6 +6116,10 @@
           return;
         }
         closeMenu();
+        if (action === "unmonitor") {
+          this.unmonitorModel(stockId);
+          return;
+        }
         UIPanels.openTradePanel(action, stockId);
       });
 
@@ -6222,6 +6231,17 @@
         menu.style.top =
           currentTop - (rect.bottom - window.innerHeight + margin) + "px";
       }
+    },
+
+    // 取消监控：与主面板模型标签删除按钮同一套效果，仅移出监控列表，不删除历史数据
+    unmonitorModel(stockId) {
+      const name = Utils.getModelName(stockId);
+      if (!confirm(`确认取消监控「${name}」吗？`)) return;
+      const d = Storage.load();
+      d.stockIds = d.stockIds.filter((m) => m !== stockId);
+      Storage.save(d);
+      this.renderModelList(d.stockIds);
+      this.refreshPriceTable(d);
     },
 
     setModelColor(stockId, color, data) {
