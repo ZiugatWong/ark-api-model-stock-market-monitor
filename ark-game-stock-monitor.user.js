@@ -1652,8 +1652,8 @@
     .ark-arbitrage-table tr:hover td {
       background: #2a2a2a;
     }
-    .ark-arbitrage-table .price-low { color: #F55454; }
-    .ark-arbitrage-table .price-high { color: #00A854; }
+    .ark-arbitrage-table .price-low { color: #00A854; }
+    .ark-arbitrage-table .price-high { color: #F55454; }
 
     #ark-trades-panel {
       position: fixed;
@@ -1742,8 +1742,8 @@
     .ark-trades-table tr:hover td {
       background: #2a2a2a;
     }
-    .ark-trades-table td.side-buy { color: #F55454; }
-    .ark-trades-table td.side-sell { color: #00A854; }
+    .ark-trades-table td.side-buy { color: #00A854; }
+    .ark-trades-table td.side-sell { color: #F55454; }
 
     .ark-market-entrance {
       display: flex;
@@ -1965,8 +1965,8 @@
       white-space: normal;
       word-break: break-word;
     }
-    .ark-price-table td.price-up { color: #00A854; }
-    .ark-price-table td.price-down { color: #F55454; }
+    .ark-price-table td.price-up { color: #F55454; }
+    .ark-price-table td.price-down { color: #00A854; }
     .ark-price-table td.price-neutral { }
     /* 时间列：容纳 MM-DD HH:MM:SS（14字符）短时间串，不换行；
        横向滚动时固定在最左，背景与面板同步避免透字。
@@ -2335,7 +2335,7 @@
        日间（浅色）主题覆盖
        - 仅在 body.ark-theme-light 下生效，夜间完全不受影响
        - 选择器均锚定本脚本的 ID / 命名空间类，避免影响宿主页面
-       - 语义色（红跌绿涨、持仓紫、买卖标记、高低/成本线）刻意保留
+       - 语义色（红涨绿跌、红盈绿亏、红卖绿买、红高绿低、持仓紫、成本线）刻意保留
        ============================================================ */
     body.ark-theme-light {
       --ark-surface: #ffffff;
@@ -2913,7 +2913,7 @@
           return {
             time: markerTime,
             position: "inBar",
-            color: trade.side === "buy" ? "#F55454" : "#00A854",
+            color: trade.side === "buy" ? "#00A854" : "#F55454",
             shape: "circle",
             text: trade.side === "buy" ? "买" : "卖",
             size: 1,
@@ -3190,7 +3190,7 @@
       if (modelArbitrage) {
         const highLine = series.createPriceLine({
           price: modelArbitrage.high_24h,
-          color: "#00A854",
+          color: "#F55454",
           lineWidth: 1,
           lineStyle: 2,
           axisLabelVisible: true,
@@ -3198,7 +3198,7 @@
         });
         const lowLine = series.createPriceLine({
           price: modelArbitrage.low_24h,
-          color: "#F55454",
+          color: "#00A854",
           lineWidth: 1,
           lineStyle: 2,
           axisLabelVisible: true,
@@ -3572,7 +3572,7 @@
       if (modelArbitrage) {
         const highLine = instance.series.createPriceLine({
           price: modelArbitrage.high_24h,
-          color: "#00A854",
+          color: "#F55454",
           lineWidth: 1,
           lineStyle: 2,
           axisLabelVisible: true,
@@ -3580,7 +3580,7 @@
         });
         const lowLine = instance.series.createPriceLine({
           price: modelArbitrage.low_24h,
-          color: "#F55454",
+          color: "#00A854",
           lineWidth: 1,
           lineStyle: 2,
           axisLabelVisible: true,
@@ -4792,7 +4792,7 @@
               <button class="info-btn" title="">💡</button>
               <span class="info-tooltip">
                 <div>小提示：</div>
-                <div>1. <span style="color:#F55454">红字</span>表示较前一时刻价格下跌，<span style="color:#00A854">绿字</span>表示较前一时刻价格上涨</div>
+                <div>1. <span style="color:#F55454">红字</span>表示较前一时刻价格上涨，<span style="color:#00A854">绿字</span>表示较前一时刻价格下跌</div>
                 <div>2. 表头模型名称为<span style="color:#a855f7">紫色</span>表示有持仓，名称前的🔒表示持仓锁定中</div>
                 <div>3. 表头模型名称处右键点击可打开交易菜单：买入 / 卖出 / 颜色标识（红/绿/黄/橙/粉/青，优先级低于持仓颜色）</div>
                 <div>4. 点击表头模型名称可查看该模型分时图：</div>
@@ -6254,9 +6254,9 @@
 
       const now = Math.floor(Date.now() / 1000);
 
-      // 盈亏值的颜色（正绿、负红、零灰）与正负号格式化
+      // 盈亏值的颜色（红盈、绿亏、零灰）与正负号格式化
       const pnlColor = (n) =>
-        n > 0 ? "#22c55e" : n < 0 ? "#ef4444" : "#cccccc";
+        n > 0 ? "#ef4444" : n < 0 ? "#22c55e" : "#cccccc";
       const fmtSigned = (n, suffix = "") =>
         `${n > 0 ? "+" : ""}${n.toFixed(2)}${suffix}`;
 
@@ -6267,7 +6267,7 @@
 
         const currentPriceHtml =
           pos.current_price !== null && pos.current_price !== undefined
-            ? `<span style="color:${pos.current_price >= pos.avg_cost ? "#22c55e" : "#ef4444"}">${pos.current_price.toFixed(2)}</span>`
+            ? `<span style="color:${pos.current_price >= pos.avg_cost ? "#ef4444" : "#22c55e"}">${pos.current_price.toFixed(2)}</span>`
             : "-";
         const costHtml =
           pos.cost_with_fee !== null && pos.cost_with_fee !== undefined
@@ -6406,8 +6406,8 @@
             <td>${Utils.escapeHtml(item.model_name)}</td>
             <td class="price-low">${fmt(metrics.low)}</td>
             <td class="price-high">${fmt(metrics.high)}</td>
-            <td class="price-high">${pct}</td>
-            <td class="${isStale ? "price-low" : "price-high"}">${isStale ? "是" : "否"}</td>
+            <td style="color:#F55454">${pct}</td>
+            <td style="color:${isStale ? "#F55454" : "#00A854"}">${isStale ? "是" : "否"}</td>
             <td><button class="${buttonClass}" data-stock-id="${Utils.escapeHtml(String(item.stockId))}" data-action="${isMonitored ? "remove" : "add"}">${buttonText}</button></td>
           </tr>
         `;

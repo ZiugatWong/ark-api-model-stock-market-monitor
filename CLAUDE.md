@@ -14,7 +14,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 - 通知系统：价格突破提醒（弹窗、声音、Telegram、Bark iOS）
 - 套利幅度榜：按所选「最近天数」区间计算的 每股套利幅度排行（单一实时榜；默认只看未停滞模型）
 - 买入/卖出交易：行情右键菜单一键下单，前端实时校验（余额/持仓/手续费/休市/锁定），并本地记录交易历史
-- 交易记录面板：展示通过本脚本成功买卖的历史（模型下拉筛选，买红卖绿）
+- 交易记录面板：展示通过本脚本成功买卖的历史（模型下拉筛选，买绿卖红）
 - 市场状态：展示开闭市、买卖手续费、持仓时长
 - 数据维护：自动清理旧数据（可配置保留天数）
 - 数据持久化：通过 GM_setValue/GM_getValue 实现，含旧版数据迁移
@@ -58,8 +58,8 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 - **API**：`window.location.origin` + `GET /api/stock`（行情）、`POST /api/stock`（买入/卖出）、`/api/me/balance`（代币）
 - **买入/卖出**：右键模型名打开一级菜单（买入/卖出/颜色标识），`UIPanels.openTradePanel` 打开单例交易面板；前端按实时行情 + 余额校验（手续费、休市、持仓锁定、股数范围），提交走 `API.submitTrade`（POST /api/stock，`idempotencyKey` 幂等）
 - **交易历史**：交易成功后在 `DataProcessor.recordTrade`（行 ~907）写入 `data.tradeHistory[stockId]`（按 id 去重、升序）；接口不提供交易历史，仅供本脚本展示与图表标记
-- **交易记录面板**：模型下拉筛选（默认「全部」，模型名按英文 A→Z 排）+ 表格（时间/模型/方向/价格/股数/成交额/手续费/余额变化），买红卖绿；无清空按钮（本地数据不可恢复）
-- **走势图交易标记**：`Chart.enrichWithTradePrices`(补入交易价数据点) + `Chart.convertToMarkers`(吸附到数据点) + `series.setMarkers`，买红 `#F55454` 卖绿 `#00A854`；均复用已有死代码函数
+- **交易记录面板**：模型下拉筛选（默认「全部」，模型名按英文 A→Z 排）+ 表格（时间/模型/方向/价格/股数/成交额/手续费/余额变化），买绿卖红；无清空按钮（本地数据不可恢复）
+- **走势图交易标记**：`Chart.enrichWithTradePrices`(补入交易价数据点) + `Chart.convertToMarkers`(吸附到数据点) + `series.setMarkers`，买绿 `#00A854` 卖红 `#F55454`；均复用已有死代码函数
 - **右键菜单**：`UIRenderers.showTradeContextMenu` 取代原 `showColorMenu`，卖出生效项需有持仓，颜色标识下沉为二级浮层（`_buildColorSubmenu`）
 - **主键策略**：全部用 stockId 串联，展示模型名时通过 `idToModel` 查表（规避模型改名/重名风险）
 - **价格历史时间戳**：stale=false（活跃）模型，取 ticks 前 n 条按 stockId 匹配的 createdAt（秒）
@@ -72,7 +72,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 - **数据清理**：按保留天数自动清理旧价格数据（默认 7 天）
 - **价格变化**：三态颜色编码（上涨/下跌/不变），价格不变时继承上一颜色
 - **通知触发**：价格从未突破到突破边界时触发；guard 检查全部 4 个渠道（含 Bark）
-- **图表**：Lightweight Charts v4.0.1，价格线（今日高/低、持仓成本线）；交易标记（买红 `#F55454` / 卖绿 `#00A854`，数据来自本地 `tradeHistory`）
+- **图表**：Lightweight Charts v4.0.1，价格线（今日高/低、持仓成本线）；交易标记（买绿 `#00A854` / 卖红 `#F55454`，数据来自本地 `tradeHistory`）
 - **表格显示限制**：最近 5 条记录（`CONFIG.TABLE_DISPLAY_LIMIT = 5`）
 - **旧数据迁移**：`Storage.migrateFromLegacy()` 首次启动迁移 windhub_stock_data（通用配置 + API 查表重建 stockId 键），`legacyMigrated` 标志防重复执行，迁移成功后旧 key 即删除
 
