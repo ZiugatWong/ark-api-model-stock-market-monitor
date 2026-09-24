@@ -7,11 +7,11 @@
 Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控面板（原 windhub.cc 站点已迁移至此）。
 
 **核心功能：**
-- 多面板 UI（主面板、价格、持仓、套利幅度榜、交易记录、设置、数据维护），支持拖拽和主题切换
+- 多面板 UI（主面板、价格、持仓、套利幅度榜、交易记录、设置、提醒设置、数据维护），支持拖拽和主题切换
 - 模型管理：选择器支持搜索、全选、清空，以 stockId 为主键
 - 价格监控：自动/手动获取、历史表格、颜色编码价格变化
 - 多图表系统：Lightweight Charts 实现，支持价格线（今日高/低、持仓成本线）、买卖点交易标记、拖拽调整大小
-- 通知系统：价格突破提醒（弹窗、声音、Telegram、Bark iOS）
+- 通知系统：价格突破提醒（弹窗、声音、Telegram、Bark iOS）；每个模型可设多条提醒价格（同方向多个价格），一次跨越多条时向上只通知最高价、向下只通知最低价
 - 套利幅度榜：按所选「最近天数」区间计算的 每股套利幅度排行（单一实时榜；默认只看未停滞模型）
 - 买入/卖出交易：行情右键菜单一键下单，前端实时校验（余额/持仓/手续费/休市/锁定），并本地记录交易历史
 - 交易记录面板：展示通过本脚本成功买卖的历史（模型下拉筛选，买绿卖红）
@@ -34,7 +34,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 10. 样式 (行 -) - Styles（CSS 注入）
 11. 图表 (行 ~2794-) - Chart（图表工具函数，含 enrichWithTradePrices/convertToMarkers 交易标记）
 12. 图表管理 (行 ~3116-) - ChartManager, MultiPanelManagerClass
-13. UI 面板工厂 (行 ~3620-) - UIPanels（面板创建，含买入/卖出交易面板与交易记录面板）
+13. UI 面板工厂 (行 ~3620-) - UIPanels（面板创建，含买入/卖出交易面板、提醒价格设定面板与交易记录面板）
 14. UI 渲染器 (行 ~5266-) - UIRenderers（表格和数据渲染，含交易记录表）
 15. 交互 (行 ~6210-) - Interactions（拖拽和调整大小）
 16. 业务入口 (行 ~6345-) - App（doFetch 主流程）
@@ -47,7 +47,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 - `positions` - 持仓数据 `{[stockId]: {shares, avg_cost, locked_until, pnl...}}`
 - `tradeHistory` - 交易历史 `{[stockId]: [{id, side, shares, price, gross, fee, net, created_at}]}`（仅记录通过本脚本成功买卖，本地保存）
 - `arbitrageData` - 套利数据（全模型快照数组，含 stale 标记与 24h 高/低，键为 stockId）
-- `notifications` - 价格提醒配置（键为 stockId）
+- `notifications` - 价格提醒设定（键为 stockId，值为设定数组 `[{id, direction: "upper"|"lower", price}]`；旧的 `{upperLimit, lowerLimit}` 结构在 `Storage.load()` 时自动转换）
 - `marketRules` - 市场状态 `{enabled, rules}` 快照
 - `userTokens` - 可用代币（整数，来自 /api/me/balance）
 - `theme` - 主题设置 (dark/light)
@@ -60,7 +60,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 - **交易历史**：交易成功后在 `DataProcessor.recordTrade`（行 ~907）写入 `data.tradeHistory[stockId]`（按 id 去重、升序）；接口不提供交易历史，仅供本脚本展示与图表标记
 - **交易记录面板**：模型下拉筛选（默认「全部」，模型名按英文 A→Z 排）+ 表格（时间/模型/方向/价格/股数/成交额/手续费/余额变化），买绿卖红；无清空按钮（本地数据不可恢复）
 - **走势图交易标记**：`Chart.enrichWithTradePrices`(补入交易价数据点) + `Chart.convertToMarkers`(吸附到数据点) + `series.setMarkers`，买绿 `#00A854` 卖红 `#F55454`；均复用已有死代码函数
-- **右键菜单**：`UIRenderers.showTradeContextMenu` 取代原 `showColorMenu`，卖出生效项需有持仓，颜色标识下沉为二级浮层（`_buildColorSubmenu`）
+- **右键菜单**：`UIRenderers.showTradeContextMenu` 取代原 `showColorMenu`，卖出生效项需有持仓，颜色标识下沉为二级浮层（`_buildColorSubmenu`）；另含「提醒设置」（打开该模型的提醒价格设定面板）与「取消监控」
 - **主键策略**：全部用 stockId 串联，展示模型名时通过 `idToModel` 查表（规避模型改名/重名风险）
 - **价格历史时间戳**：stale=false（活跃）模型，取 ticks 前 n 条按 stockId 匹配的 createdAt（秒）
 - **stale 语义**：`stale === false` 表示数据新鲜/活跃（本轮有 tick），套利幅度榜为「未停滞」，显示绿色；`stale === true` 表示数据陈旧（无 tick），为「停滞」，显示红色
@@ -71,7 +71,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 - **缓存**：5 分钟缓存（模型列表 idToModel）
 - **数据清理**：按保留天数自动清理旧价格数据（默认 7 天）
 - **价格变化**：三态颜色编码（上涨/下跌/不变），价格不变时继承上一颜色
-- **通知触发**：价格从未突破到突破边界时触发；guard 检查全部 4 个渠道（含 Bark）
+- **通知触发**：价格从上次到本次跨越设定价时触发；同一模型同一方向一次跨越多条设定时，向上只取最高价、向下只取最低价，各至多一条；guard 检查全部 4 个渠道（含 Bark）
 - **图表**：Lightweight Charts v4.0.1，价格线（今日高/低、持仓成本线）；交易标记（买绿 `#00A854` / 卖红 `#F55454`，数据来自本地 `tradeHistory`）
 - **表格显示限制**：最近 5 条记录（`CONFIG.TABLE_DISPLAY_LIMIT = 5`）
 - **旧数据迁移**：`Storage.migrateFromLegacy()` 首次启动迁移 windhub_stock_data（通用配置 + API 查表重建 stockId 键），`legacyMigrated` 标志防重复执行，迁移成功后旧 key 即删除

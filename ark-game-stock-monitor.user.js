@@ -85,6 +85,40 @@
     _cache: null,
     _persistTimer: null,
 
+    // 将 notifications 归一化为 {[stockId]: [{id, direction, price}]}。
+    // 旧结构 {[stockId]: {upperLimit, lowerLimit}} 在此转换为设定数组，
+    // 每个非空上下限各成一条；已是数组的原样保留。返回值附带 changed 标记。
+    _normalizeNotifications(raw) {
+      const result = {};
+      let changed = false;
+      if (!raw || typeof raw !== "object") return { data: result, changed };
+      for (const [key, value] of Object.entries(raw)) {
+        if (Array.isArray(value)) {
+          result[key] = value;
+          continue;
+        }
+        changed = true;
+        if (!value || typeof value !== "object") continue;
+        const rules = [];
+        if (value.upperLimit !== null && value.upperLimit !== undefined) {
+          rules.push({
+            id: `nb:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`,
+            direction: "upper",
+            price: value.upperLimit,
+          });
+        }
+        if (value.lowerLimit !== null && value.lowerLimit !== undefined) {
+          rules.push({
+            id: `nb:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`,
+            direction: "lower",
+            price: value.lowerLimit,
+          });
+        }
+        if (rules.length > 0) result[key] = rules;
+      }
+      return { data: result, changed };
+    },
+
     load() {
       if (this._cache) return this._cache;
 
@@ -95,6 +129,8 @@
       }
       try {
         const d = typeof raw === "string" ? JSON.parse(raw) : raw;
+        // 旧的 {upperLimit, lowerLimit} 结构在此转换为设定数组，转换过则落盘一次
+        const notifications = this._normalizeNotifications(d.notifications);
         this._cache = {
           stockIds: d.stockIds || [],
           autoTriggerMinuteEnds: d.autoTriggerMinuteEnds || "1,6",
@@ -112,7 +148,7 @@
             enableBark: false,
             barkUrl: null,
           },
-          notifications: d.notifications || {},
+          notifications: notifications.data,
           arbitrageData: d.arbitrageData || [],
           positions: d.positions || {},
           tradeHistory: d.tradeHistory || {},
@@ -127,6 +163,7 @@
           theme: d.theme === "light" ? "light" : "dark",
           legacyMigrated: !!d.legacyMigrated,
         };
+        if (notifications.changed) this.save(this._cache);
         return this._cache;
       } catch {
         this._cache = JSON.parse(JSON.stringify(DEFAULT_DATA));
@@ -206,13 +243,14 @@
               .filter((id) => id !== undefined);
           }
 
-          // 重建 notifications（旧键 modelName → stockId）
+          // 重建 notifications（旧键 modelName → stockId，旧上下限结构一并转成设定数组）
           if (oldData.notifications) {
-            newData.notifications = {};
+            const byName = {};
             for (const [name, cfg] of Object.entries(oldData.notifications)) {
               const id = nameToId[name];
-              if (id !== undefined) newData.notifications[id] = cfg;
+              if (id !== undefined) byName[id] = cfg;
             }
+            newData.notifications = this._normalizeNotifications(byName).data;
           }
 
           // 重建 modelColors（旧键 modelName → stockId）
@@ -854,7 +892,8 @@
         if (!monitoredIds.has(stockId)) continue;
         if (deduplicatedStockIds.includes(stockId)) continue;
 
-        const config = notifications[stockId];
+        const rules = notifications[stockId];
+        if (!Array.isArray(rules) || rules.length === 0) continue;
         const modelData = data.priceData[stockId];
         if (!modelData || modelData.length < 2) continue;
 
@@ -863,32 +902,45 @@
         const latestPrice = latest[1];
         const previousPrice = previous[1];
 
-        if (config.upperLimit !== null && config.upperLimit !== undefined) {
-          if (
-            previousPrice < config.upperLimit &&
-            latestPrice >= config.upperLimit
-          ) {
-            triggered.push({
-              model: Utils.getModelName(stockId),
-              price: latestPrice,
-              limit: config.upperLimit,
-              type: "upper",
-            });
+        // 同方向一次跨越多条设定时只通知最极端的一条：
+        // 向上取价格最高的，向下取价格最低的，避免一次触发多条提醒
+        let bestUpper = null;
+        let bestLower = null;
+        for (const rule of rules) {
+          if (rule.direction === "upper") {
+            if (
+              previousPrice < rule.price &&
+              latestPrice >= rule.price &&
+              (bestUpper === null || rule.price > bestUpper)
+            ) {
+              bestUpper = rule.price;
+            }
+          } else if (rule.direction === "lower") {
+            if (
+              previousPrice > rule.price &&
+              latestPrice <= rule.price &&
+              (bestLower === null || rule.price < bestLower)
+            ) {
+              bestLower = rule.price;
+            }
           }
         }
 
-        if (config.lowerLimit !== null && config.lowerLimit !== undefined) {
-          if (
-            previousPrice > config.lowerLimit &&
-            latestPrice <= config.lowerLimit
-          ) {
-            triggered.push({
-              model: Utils.getModelName(stockId),
-              price: latestPrice,
-              limit: config.lowerLimit,
-              type: "lower",
-            });
-          }
+        if (bestUpper !== null) {
+          triggered.push({
+            model: Utils.getModelName(stockId),
+            price: latestPrice,
+            limit: bestUpper,
+            type: "upper",
+          });
+        }
+        if (bestLower !== null) {
+          triggered.push({
+            model: Utils.getModelName(stockId),
+            price: latestPrice,
+            limit: bestLower,
+            type: "lower",
+          });
         }
       }
 
@@ -992,7 +1044,7 @@
         content += `<div style="margin: 10px 0; padding: 8px; background: var(--ark-popup-item); border-radius: 6px;">`;
         content += `<div style="margin: 4px 0;">模型: <strong>${Utils.escapeHtml(item.model)}</strong></div>`;
         content += `<div style="margin: 4px 0;">当前价格: <strong class="price-pulse" style="font-size: 28px;">${item.price.toFixed(2)}</strong></div>`;
-        content += `<div style="margin: 4px 0;">${label}: <strong>${item.limit}</strong></div>`;
+        content += `<div style="margin: 4px 0;">${label}: <strong>${item.limit.toFixed(2)}</strong></div>`;
         content += `</div>`;
       });
 
@@ -1077,7 +1129,7 @@
         const label = item.type === "upper" ? "突破上限" : "突破下限";
         message += `模型: ${item.model}\n`;
         message += `当前价格: ${item.price.toFixed(2)}\n`;
-        message += `${label}: ${item.limit}\n\n`;
+        message += `${label}: ${item.limit.toFixed(2)}\n\n`;
       });
 
       message += `━━━━━━━━━━━━━━━━━━━━\n`;
@@ -1125,7 +1177,7 @@
       triggered.forEach((item, index) => {
         const label = item.type === "upper" ? "突破上限" : "突破下限";
         body += `\n${index + 1}. ${item.model}\n`;
-        body += `   价格: ${item.price.toFixed(2)} | ${label}: ${item.limit}`;
+        body += `   价格: ${item.price.toFixed(2)} | ${label}: ${item.limit.toFixed(2)}`;
       });
 
       body += `\n\n时间: ${TimeUtils.formatDateTime(Date.now())}`;
@@ -1462,6 +1514,33 @@
       border-radius: 0 0 10px 10px;
     }
 
+    #ark-notification-panel {
+      position: fixed;
+      top: 60px;
+      right: 560px;
+      width: 450px;
+      max-height: 80vh;
+      background: #1a1a1a;
+      color: #f0f0f0;
+      border: 1px solid #333;
+      border-radius: 10px;
+      z-index: 1998;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #ark-notification-panel.visible { display: flex; }
+    #ark-notification-panel .panel-body {
+      padding: 6px 10px;
+      overflow-y: auto;
+      flex: 1;
+      background: #1a1a1a;
+      border-radius: 0 0 10px 10px;
+    }
+
     #ark-data-maintenance-panel {
       position: fixed;
       top: 60px;
@@ -1535,6 +1614,35 @@
     }
     #ark-trade-panel.visible { display: flex; }
     #ark-trade-panel .panel-body {
+      padding: 6px 10px;
+      overflow-y: auto;
+      flex: 1;
+      background: #1a1a1a;
+      border-radius: 0 0 10px 10px;
+    }
+
+    #ark-price-alert-panel {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: max-content;
+      min-width: 200px;
+      max-width: 90vw;
+      background: #1a1a1a;
+      color: #f0f0f0;
+      border: 1px solid #333;
+      border-radius: 10px;
+      z-index: 1998;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #ark-price-alert-panel.visible { display: flex; }
+    #ark-price-alert-panel .panel-body {
       padding: 6px 10px;
       overflow-y: auto;
       flex: 1;
@@ -2390,9 +2498,11 @@
     /* 面板容器 */
     body.ark-theme-light #ark-stock-panel,
     body.ark-theme-light #ark-settings-panel,
+    body.ark-theme-light #ark-notification-panel,
     body.ark-theme-light #ark-data-maintenance-panel,
     body.ark-theme-light #ark-price-panel,
     body.ark-theme-light #ark-trade-panel,
+    body.ark-theme-light #ark-price-alert-panel,
     body.ark-theme-light #ark-positions-panel,
     body.ark-theme-light #ark-arbitrage-panel,
     body.ark-theme-light #ark-trades-panel,
@@ -2436,9 +2546,11 @@
     /* 正文区 */
     body.ark-theme-light #ark-stock-panel .panel-body,
     body.ark-theme-light #ark-settings-panel .panel-body,
+    body.ark-theme-light #ark-notification-panel .panel-body,
     body.ark-theme-light #ark-data-maintenance-panel .panel-body,
     body.ark-theme-light #ark-price-panel .panel-body,
     body.ark-theme-light #ark-trade-panel .panel-body,
+    body.ark-theme-light #ark-price-alert-panel .panel-body,
     body.ark-theme-light #ark-positions-panel .panel-body,
     body.ark-theme-light #ark-arbitrage-panel .panel-body,
     body.ark-theme-light #ark-trades-panel .panel-body {
@@ -3804,8 +3916,10 @@
   const UIPanels = {
     _mainPanel: null,
     _settingsPanel: null,
+    _notificationPanel: null,
     _pricePanel: null,
     _tradePanel: null, // 买入/卖出交易面板（单例，按 action 切换内容）
+    _priceAlertPanel: null, // 提醒价格设定面板（单例，按模型切换内容）
     _tradeBusy: false, // 交易请求进行中守卫（防重复提交）
     _tradeRefreshBusy: false, // 交易面板数据刷新进行中守卫（防重复请求）
     _tradeRefreshQueued: false, // 刷新进行中又有新刷新请求时，结束后补一次
@@ -3840,6 +3954,7 @@
           <div class="header-right">
             <button class="theme-toggle-btn" id="ark-theme-toggle-btn" title="${data.theme === "light" ? "切换到夜间主题" : "切换到日间主题"}">${data.theme === "light" ? "&#x2600;" : "&#x1F319;"}</button>
             <button class="data-maintenance-btn" id="ark-data-maintenance-btn" title="数据维护">&#x26C1;</button>
+            <button class="settings-btn" id="ark-notification-btn" title="提醒设置">&#x260E;&#xFE0E;</button>
             <button class="settings-btn" id="ark-settings-btn" title="设置">&#x2699;</button>
             <button class="close-btn" title="关闭">&times;</button>
           </div>
@@ -3913,6 +4028,24 @@
             UIPanels._settingsPanel.classList.contains("visible")
           ) {
             UIPanels.bringToFront(UIPanels._settingsPanel);
+          }
+        });
+
+      this._mainPanel
+        .querySelector("#ark-notification-btn")
+        .addEventListener("click", () => {
+          if (!UIPanels._notificationPanel) {
+            UIPanels._notificationPanel = UIPanels.createNotificationPanel();
+          }
+          const isVisible =
+            UIPanels._notificationPanel.classList.contains("visible");
+          UIPanels._notificationPanel.classList.toggle("visible");
+          // 如果面板已经显示，或者刚切换为显示状态，则置顶
+          if (
+            isVisible ||
+            UIPanels._notificationPanel.classList.contains("visible")
+          ) {
+            UIPanels.bringToFront(UIPanels._notificationPanel);
           }
         });
 
@@ -4243,81 +4376,10 @@
               <button class="ark-blue-btn" id="ark-fetch-btn">手动获取</button>
             </div>
             <div class="ark-trigger-row">
-              <span style="color:var(--ark-label);font-size:12px;">匹配分钟尾数：</span>
+              <span style="color:var(--ark-label);font-size:12px;">定时获取时间所匹配的分钟尾数：</span>
               <input type="text" class="ark-minute-input" id="ark-minute-ends" placeholder="如 3,8" title="如填 3,8 代表每小时的 03、08、13、18...分钟，会自动触发行情获取" />
               <button class="ark-green-btn" id="ark-save-minute-btn">保存</button>
             </div>
-          </div>
-
-          <div class="ark-section" id="ark-notification-section">
-            <div class="ark-section-label">价格突破提醒</div>
-            <div class="ark-trigger-row">
-              <button class="ark-blue-btn" id="ark-test-notif-btn">测试已打开的提醒</button>
-            </div>
-            <div class="ark-trigger-row">
-              <span style="color:var(--ark-label);font-size:12px;">开启浏览器弹窗提醒：</span>
-              <label class="ark-toggle">
-                <input type="checkbox" id="ark-notif-popup-toggle" />
-                <span class="slider"></span>
-              </label>
-            </div>
-            <div class="ark-trigger-row">
-              <span style="color:var(--ark-label);font-size:12px;">开启提示音：</span>
-              <label class="ark-toggle">
-                <input type="checkbox" id="ark-notif-sound-toggle" />
-                <span class="slider"></span>
-              </label>
-            </div>
-            <div class="ark-trigger-row">
-              <span style="color:var(--ark-label);font-size:12px;">开启 Telegram 提醒：</span>
-              <label class="ark-toggle">
-                <input type="checkbox" id="ark-notif-telegram-toggle" />
-                <span class="slider"></span>
-              </label>
-            </div>
-            <div id="ark-telegram-config" style="display:none; margin-top: 10px;">
-              <div class="ark-trigger-row">
-                <span style="color:var(--ark-label);font-size:12px;width:80px;">Bot Token：</span>
-                <input type="text" class="ark-minute-input" id="ark-telegram-token" placeholder="请输入 Token" style="width: 320px;" />
-              </div>
-              <div class="ark-trigger-row">
-                <span style="color:var(--ark-label);font-size:12px;width:80px;">Chat ID：</span>
-                <input type="text" class="ark-minute-input" id="ark-telegram-chatid" placeholder="请输入 Chat ID" style="width: 320px;" />
-              </div>
-            </div>
-            <div class="ark-trigger-row">
-              <span style="color:var(--ark-label);font-size:12px;">开启 Bark 提醒：</span>
-              <label class="ark-toggle">
-                <input type="checkbox" id="ark-notif-bark-toggle" />
-                <span class="slider"></span>
-              </label>
-            </div>
-            <div id="ark-bark-config" style="display:none; margin-top: 10px;">
-              <div class="ark-trigger-row">
-                <span style="color:var(--ark-label);font-size:12px;width:80px;">Bark URL：</span>
-                <input type="text" class="ark-minute-input" id="ark-bark-url" placeholder="https://api.day.app/YOUR_KEY" style="width: 320px;" />
-              </div>
-              <div style="font-size:10px;color:var(--ark-muted);margin-top:4px;margin-left:80px;">
-                从 Bark App 复制完整推送地址
-              </div>
-            </div>
-            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ark-border-2);">
-              <div class="ark-section-label" style="font-size: 11px; color: var(--ark-muted); border-bottom: none; margin-bottom: 6px;">添加模型价格突破提醒</div>
-              <div class="ark-trigger-row">
-                <span style="color:var(--ark-label);font-size:12px;">模型：</span>
-                <select id="ark-notif-model-select" class="ark-minute-input" style="width: 300px; background: var(--ark-input); border: 1px solid var(--ark-border-2); color: var(--ark-text); padding: 5px 10px; border-radius: 6px;">
-                  <option value="">请选择模型</option>
-                </select>
-              </div>
-              <div class="ark-trigger-row">
-                <span style="color:var(--ark-label);font-size:12px;">向上突破：</span>
-                <input type="number" class="ark-minute-input" id="ark-notif-upper" style="width: 80px;" min="0" step="1" />
-                <span style="color:var(--ark-label);font-size:12px; margin-left: 10px;">向下突破：</span>
-                <input type="number" class="ark-minute-input" id="ark-notif-lower" style="width: 80px;" min="0" step="1" />
-                <button class="ark-green-btn" id="ark-save-notif-btn" style="margin-left: 10px;">添加</button>
-              </div>
-            </div>
-            <div id="ark-notif-list" style="margin-top: 10px; max-height: 250px; overflow-y: auto;"></div>
           </div>
         </div>
       `;
@@ -4376,41 +4438,139 @@
         fetchBtn.textContent = "手动获取";
       });
 
-      const notifPopupToggle = this._settingsPanel.querySelector(
+      return this._settingsPanel;
+    },
+
+    createNotificationPanel() {
+      if (this._notificationPanel) return this._notificationPanel;
+
+      const data = Storage.load();
+      this._notificationPanel = document.createElement("div");
+      this._notificationPanel.id = "ark-notification-panel";
+
+      this._notificationPanel.innerHTML = `
+        <div class="ark-panel-header">
+          <div class="header-left">
+            <span class="title">提醒设置</span>
+          </div>
+          <div class="header-right">
+            <button class="close-btn" title="关闭">&times;</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="ark-section" id="ark-notification-section">
+            <div class="ark-section-label">价格突破提醒</div>
+            <div class="ark-trigger-row">
+              <button class="ark-blue-btn" id="ark-test-notif-btn">测试已打开的提醒</button>
+            </div>
+            <div class="ark-trigger-row">
+              <span style="color:var(--ark-label);font-size:12px;">开启浏览器弹窗提醒：</span>
+              <label class="ark-toggle">
+                <input type="checkbox" id="ark-notif-popup-toggle" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="ark-trigger-row">
+              <span style="color:var(--ark-label);font-size:12px;">开启提示音：</span>
+              <label class="ark-toggle">
+                <input type="checkbox" id="ark-notif-sound-toggle" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="ark-trigger-row">
+              <span style="color:var(--ark-label);font-size:12px;">开启 Telegram 提醒：</span>
+              <label class="ark-toggle">
+                <input type="checkbox" id="ark-notif-telegram-toggle" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div id="ark-telegram-config" style="display:none; margin-top: 10px;">
+              <div class="ark-trigger-row">
+                <span style="color:var(--ark-label);font-size:12px;width:80px;">Bot Token：</span>
+                <input type="text" class="ark-minute-input" id="ark-telegram-token" placeholder="请输入 Token" style="width: 320px;" />
+              </div>
+              <div class="ark-trigger-row">
+                <span style="color:var(--ark-label);font-size:12px;width:80px;">Chat ID：</span>
+                <input type="text" class="ark-minute-input" id="ark-telegram-chatid" placeholder="请输入 Chat ID" style="width: 320px;" />
+              </div>
+            </div>
+            <div class="ark-trigger-row">
+              <span style="color:var(--ark-label);font-size:12px;">开启 Bark 提醒：</span>
+              <label class="ark-toggle">
+                <input type="checkbox" id="ark-notif-bark-toggle" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div id="ark-bark-config" style="display:none; margin-top: 10px;">
+              <div class="ark-trigger-row">
+                <span style="color:var(--ark-label);font-size:12px;width:80px;">Bark URL：</span>
+                <input type="text" class="ark-minute-input" id="ark-bark-url" placeholder="https://api.day.app/YOUR_KEY" style="width: 320px;" />
+              </div>
+              <div style="font-size:10px;color:var(--ark-muted);margin-top:4px;margin-left:80px;">
+                从 Bark App 复制完整推送地址
+              </div>
+            </div>
+          </div>
+
+          <div class="ark-section" id="ark-notif-rules-section">
+            <div class="ark-section-label">提醒价格设定</div>
+            <div class="ark-trigger-row">
+              <span style="color:var(--ark-label);font-size:12px;">选择模型：</span>
+              <select id="ark-notif-model-select" class="ark-minute-input" style="width: 260px; background: var(--ark-input); border: 1px solid var(--ark-border-2); color: var(--ark-text); padding: 5px 10px; border-radius: 6px;">
+                <option value="">全部模型</option>
+              </select>
+              <button class="ark-green-btn" id="ark-add-notif-btn" style="margin-left: 10px;">添加</button>
+            </div>
+            <div id="ark-notif-list" style="margin-top: 10px; max-height: 250px; overflow-y: auto;"></div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(this._notificationPanel);
+      Interactions.initDrag(
+        this._notificationPanel,
+        this._notificationPanel.querySelector(".ark-panel-header"),
+      );
+
+      this._notificationPanel
+        .querySelector(".close-btn")
+        .addEventListener("click", () => {
+          this._notificationPanel.classList.remove("visible");
+        });
+
+      const notifPopupToggle = this._notificationPanel.querySelector(
         "#ark-notif-popup-toggle",
       );
-      const notifSoundToggle = this._settingsPanel.querySelector(
+      const notifSoundToggle = this._notificationPanel.querySelector(
         "#ark-notif-sound-toggle",
       );
-      const notifTelegramToggle = this._settingsPanel.querySelector(
+      const notifTelegramToggle = this._notificationPanel.querySelector(
         "#ark-notif-telegram-toggle",
       );
-      const telegramConfig = this._settingsPanel.querySelector(
+      const telegramConfig = this._notificationPanel.querySelector(
         "#ark-telegram-config",
       );
-      const telegramTokenInput = this._settingsPanel.querySelector(
+      const telegramTokenInput = this._notificationPanel.querySelector(
         "#ark-telegram-token",
       );
-      const telegramChatIdInput = this._settingsPanel.querySelector(
+      const telegramChatIdInput = this._notificationPanel.querySelector(
         "#ark-telegram-chatid",
       );
-      const notifBarkToggle = this._settingsPanel.querySelector(
+      const notifBarkToggle = this._notificationPanel.querySelector(
         "#ark-notif-bark-toggle",
       );
-      const barkConfig = this._settingsPanel.querySelector("#ark-bark-config");
-      const barkUrlInput = this._settingsPanel.querySelector("#ark-bark-url");
-      const notifModelSelect = this._settingsPanel.querySelector(
+      const barkConfig =
+        this._notificationPanel.querySelector("#ark-bark-config");
+      const barkUrlInput =
+        this._notificationPanel.querySelector("#ark-bark-url");
+      const notifModelSelect = this._notificationPanel.querySelector(
         "#ark-notif-model-select",
       );
-      const notifUpperInput =
-        this._settingsPanel.querySelector("#ark-notif-upper");
-      const notifLowerInput =
-        this._settingsPanel.querySelector("#ark-notif-lower");
-      const saveNotifBtn = this._settingsPanel.querySelector(
-        "#ark-save-notif-btn",
-      );
-      const notifList = this._settingsPanel.querySelector("#ark-notif-list");
-      const testNotifBtn = this._settingsPanel.querySelector(
+      const addNotifBtn =
+        this._notificationPanel.querySelector("#ark-add-notif-btn");
+      const notifList =
+        this._notificationPanel.querySelector("#ark-notif-list");
+      const testNotifBtn = this._notificationPanel.querySelector(
         "#ark-test-notif-btn",
       );
 
@@ -4475,43 +4635,66 @@
 
       function populateNotifModelSelect() {
         const data = Storage.load();
-        notifModelSelect.innerHTML = '<option value="">请选择模型</option>';
-        data.stockIds.forEach((stockId) => {
+        const current = notifModelSelect.value;
+        notifModelSelect.innerHTML = '<option value="">全部模型</option>';
+        // 按模型名的英文字母序排列，与交易记录面板的模型下拉框一致
+        const stockIds = [...data.stockIds].sort((a, b) =>
+          (data.idToModel[a] || "").localeCompare(
+            data.idToModel[b] || "",
+            "en",
+          ),
+        );
+        stockIds.forEach((stockId) => {
           const option = document.createElement("option");
           option.value = stockId;
           option.textContent = Utils.getModelName(stockId);
           notifModelSelect.appendChild(option);
         });
+        // 刷新选项后恢复原选择（模型仍在监控列表中时）
+        if (
+          current &&
+          notifModelSelect.querySelector(`option[value="${current}"]`)
+        ) {
+          notifModelSelect.value = current;
+        }
       }
 
+      // 未选模型时列出全部设定，选中模型后只列该模型的设定。
+      // 每行：模型名、方向、价格、删除按钮（按设定 id 定位）
       function renderNotificationList() {
         const data = Storage.load();
         const notifications = data.notifications;
-        const keys = Object.keys(notifications);
+        const selected = notifModelSelect.value;
+        const stockIds = selected ? [selected] : Object.keys(notifications);
 
-        if (keys.length === 0) {
+        const rows = [];
+        for (const stockId of stockIds) {
+          const rules = notifications[stockId];
+          if (!Array.isArray(rules)) continue;
+          // 同模型内按价格从低到高展示（仅影响展示顺序，不改存储）
+          const sorted = [...rules].sort((a, b) => a.price - b.price);
+          for (const rule of sorted) {
+            rows.push({ stockId, rule });
+          }
+        }
+
+        if (rows.length === 0) {
           notifList.innerHTML =
-            '<div style="color:var(--ark-muted);font-size:12px;text-align:center;">暂无提醒设置</div>';
+            '<div style="color:var(--ark-muted);font-size:12px;text-align:center;">暂无提醒价格设定</div>';
           return;
         }
 
-        notifList.innerHTML = keys
-          .map((stockId) => {
-            const config = notifications[stockId];
-            const upper =
-              config.upperLimit !== null && config.upperLimit !== undefined
-                ? config.upperLimit
-                : "-";
-            const lower =
-              config.lowerLimit !== null && config.lowerLimit !== undefined
-                ? config.lowerLimit
-                : "-";
+        notifList.innerHTML = rows
+          .map(({ stockId, rule }) => {
+            const isUpper = rule.direction === "upper";
+            const direction = isUpper ? "向上突破" : "向下突破";
+            const directionColor = isUpper ? "#ff6b6b" : "#4caf50";
             return `
           <div style="display:flex;align-items:center;padding:6px 8px;background:var(--ark-input);border:1px solid var(--ark-border);border-radius:4px;margin-bottom:4px;">
             <span style="color:var(--ark-text);font-size:12px;flex-shrink:0;margin-right:auto;">${Utils.escapeHtml(Utils.getModelName(stockId))}</span>
-            <span style="color:var(--ark-muted);font-size:11px;width:100px;text-align:left;">向上突破：${upper}</span>
-            <span style="color:var(--ark-muted);font-size:11px;width:100px;text-align:left;">向下突破：${lower}</span>
-            <button class="del-btn" data-stock-id="${Utils.escapeHtml(String(stockId))}" title="删除" style="background:none;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;padding:0 4px;margin-left:8px;flex-shrink:0;">&times;</button>
+            <span style="color:${directionColor};font-size:11px;width:70px;text-align:left;">${direction}</span>
+            <span style="color:var(--ark-muted);font-size:11px;width:70px;text-align:left;">${rule.price.toFixed(2)}</span>
+            <button class="del-btn" data-stock-id="${Utils.escapeHtml(String(stockId))}" data-rule-id="${Utils.escapeHtml(rule.id)}" title="删除" style="background:none;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;padding:0 4px;margin-left:8px;flex-shrink:0;">&times;</button>
           </div>
         `;
           })
@@ -4520,55 +4703,29 @@
         notifList.querySelectorAll(".del-btn").forEach((btn) => {
           btn.addEventListener("click", () => {
             const stockId = Number(btn.getAttribute("data-stock-id"));
+            const ruleId = btn.getAttribute("data-rule-id");
             const d = Storage.load();
-            delete d.notifications[stockId];
+            const rules = d.notifications[stockId];
+            if (!Array.isArray(rules)) return;
+            const next = rules.filter((r) => r.id !== ruleId);
+            if (next.length > 0) d.notifications[stockId] = next;
+            else delete d.notifications[stockId];
             Storage.save(d);
             renderNotificationList();
           });
         });
       }
 
-      saveNotifBtn.addEventListener("click", () => {
-        const stockId = notifModelSelect.value;
-        const upperInput = notifUpperInput.value.trim();
-        const lowerInput = notifLowerInput.value.trim();
-        let upper = null;
-        let lower = null;
+      // 供提醒价格设定面板保存后回调，刷新当前列表
+      this._refreshNotificationList = renderNotificationList;
 
-        if (upperInput) {
-          upper = parseFloat(upperInput);
-          if (isNaN(upper) || upper < 0 || !Number.isInteger(upper)) {
-            alert("上限价格必须是不小于0的整数");
-            return;
-          }
-        }
-        if (lowerInput) {
-          lower = parseFloat(lowerInput);
-          if (isNaN(lower) || lower < 0 || !Number.isInteger(lower)) {
-            alert("下限价格必须是不小于0的整数");
-            return;
-          }
-        }
+      addNotifBtn.addEventListener("click", () => {
+        const stockId = notifModelSelect.value;
         if (!stockId) {
           alert("请选择模型");
           return;
         }
-        if (upper === null && lower === null) {
-          alert("请至少填写上限或下限");
-          return;
-        }
-
-        const d = Storage.load();
-        if (!d.notifications[stockId]) {
-          d.notifications[stockId] = { upperLimit: null, lowerLimit: null };
-        }
-        if (upper !== null) d.notifications[stockId].upperLimit = upper;
-        if (lower !== null) d.notifications[stockId].lowerLimit = lower;
-        Storage.save(d);
-        notifUpperInput.value = "";
-        notifLowerInput.value = "";
-        notifModelSelect.value = "";
-        renderNotificationList();
+        this.openPriceAlertPanel(Number(stockId));
       });
 
       testNotifBtn.addEventListener("click", () => {
@@ -4577,11 +4734,127 @@
       notifModelSelect.addEventListener("mousedown", () => {
         populateNotifModelSelect();
       });
+      notifModelSelect.addEventListener("change", () => {
+        renderNotificationList();
+      });
 
       populateNotifModelSelect();
       renderNotificationList();
 
-      return this._settingsPanel;
+      return this._notificationPanel;
+    },
+
+    // 提醒价格设定面板（单例）：展示模型名，选择方向并填写价格后保存一条设定
+    openPriceAlertPanel(stockId) {
+      const panel =
+        this._priceAlertPanel ||
+        (this._priceAlertPanel = this.createPriceAlertPanel());
+      this._priceAlertStockId = stockId;
+      panel.querySelector("#ark-price-alert-model").textContent =
+        Utils.getModelName(stockId);
+      panel.querySelector("#ark-price-alert-price").value = "";
+      const statusEl = panel.querySelector("#ark-price-alert-status");
+      statusEl.textContent = "";
+      statusEl.style.color = "";
+      panel.classList.add("visible");
+      this.bringToFront(panel);
+    },
+
+    createPriceAlertPanel() {
+      const panel = document.createElement("div");
+      panel.id = "ark-price-alert-panel";
+
+      panel.innerHTML = `
+        <div class="ark-panel-header">
+          <div class="header-left">
+            <span class="title">提醒价格设定</span>
+          </div>
+          <div class="header-right">
+            <button class="close-btn" title="关闭">&times;</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="ark-section">
+            <div class="ark-trigger-row">
+              <span style="color:var(--ark-label);font-size:12px;">模型：</span>
+              <span id="ark-price-alert-model" style="color:var(--ark-text);font-size:12px;"></span>
+            </div>
+            <div class="ark-trigger-row">
+              <span style="color:var(--ark-label);font-size:12px;">方向：</span>
+              <select id="ark-price-alert-direction" class="ark-minute-input" style="width: 140px; background: var(--ark-input); border: 1px solid var(--ark-border-2); color: var(--ark-text); padding: 5px 10px; border-radius: 6px;">
+                <option value="upper">向上突破</option>
+                <option value="lower">向下突破</option>
+              </select>
+            </div>
+            <div class="ark-trigger-row">
+              <span style="color:var(--ark-label);font-size:12px;">价格：</span>
+              <input type="text" class="ark-minute-input" id="ark-price-alert-price" inputmode="decimal" style="width: 140px;" />
+            </div>
+            <div id="ark-price-alert-status" style="margin-top: 6px; font-size: 11px; min-height: 16px;"></div>
+            <div class="ark-trigger-row" id="ark-price-alert-actions" style="margin-top: 8px; justify-content: center;">
+              <button class="ark-blue-btn" id="ark-price-alert-confirm">确定</button>
+              <button class="ark-green-btn" id="ark-price-alert-cancel" style="margin-left: 8px;">取消</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(panel);
+      Interactions.initDrag(panel, panel.querySelector(".ark-panel-header"));
+
+      const closePanel = () => panel.classList.remove("visible");
+      panel.querySelector(".close-btn").addEventListener("click", closePanel);
+      panel
+        .querySelector("#ark-price-alert-cancel")
+        .addEventListener("click", closePanel);
+
+      panel
+        .querySelector("#ark-price-alert-confirm")
+        .addEventListener("click", () => {
+          const stockId = this._priceAlertStockId;
+          const direction = panel.querySelector(
+            "#ark-price-alert-direction",
+          ).value;
+          const raw = panel
+            .querySelector("#ark-price-alert-price")
+            .value.trim();
+          const statusEl = panel.querySelector("#ark-price-alert-status");
+
+          // 仅校验是否为合法数字，通过后统一四舍五入到两位小数
+          const price = Math.round(Number(raw) * 100) / 100;
+          if (raw === "" || !Number.isFinite(price)) {
+            statusEl.textContent = "请输入合法的数字";
+            statusEl.style.color = "#ff6b6b";
+            return;
+          }
+
+          const d = Storage.load();
+          const rules = Array.isArray(d.notifications[stockId])
+            ? d.notifications[stockId]
+            : [];
+          // 同一模型、同一方向、同一价格不允许重复
+          if (
+            rules.some((r) => r.direction === direction && r.price === price)
+          ) {
+            statusEl.textContent = "该价格设定已存在";
+            statusEl.style.color = "#ff6b6b";
+            return;
+          }
+
+          rules.push({
+            id: `nb:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`,
+            direction,
+            price,
+          });
+          d.notifications[stockId] = rules;
+          Storage.save(d);
+
+          closePanel();
+          // 提醒设置面板已打开时刷新其设定列表
+          if (this._refreshNotificationList) this._refreshNotificationList();
+        });
+
+      return panel;
     },
 
     createDataMaintenancePanel() {
@@ -4846,7 +5119,7 @@
                 <div>小提示：</div>
                 <div>1. <span style="color:#F55454">红字</span>表示较前一时刻价格上涨，<span style="color:#00A854">绿字</span>表示较前一时刻价格下跌</div>
                 <div>2. 表头模型名称为<span style="color:#a855f7">紫色</span>表示有持仓，名称前的🔒表示持仓锁定中</div>
-                <div>3. 表头模型名称处右键点击可打开交易菜单：买入 / 卖出 / 颜色标识（红/绿/黄/橙/粉/青，优先级低于持仓颜色）</div>
+                <div>3. 表头模型名称处右键点击可打开交易菜单：买入 / 卖出 / 颜色标识（优先级低于持仓颜色）/ 提醒设置 / 取消监控</div>
                 <div>4. 点击表头模型名称可查看该模型分时图：</div>
                 <pre>① 分时图窗口可拖拽改变大小\n② 分时图内拖拽可移动时间窗口\n③ 数据线和坐标轴处可通过鼠标滚轮实现范围缩放</pre>
               </span>
@@ -6081,6 +6354,7 @@
         <div class="ark-menu-item" data-action="buy"><span>买入</span></div>
         <div class="ark-menu-item${hasPosition ? "" : " ark-menu-item-disabled"}" data-action="sell"><span>卖出</span></div>
         <div class="ark-menu-item" data-action="colors"><span>颜色标识</span><span class="ark-menu-arrow">▸</span></div>
+        <div class="ark-menu-item" data-action="alert"><span>提醒设置</span></div>
         <div class="ark-menu-item ark-menu-item-danger" data-action="unmonitor"><span>取消监控</span></div>
       `;
       document.body.appendChild(menu);
@@ -6118,6 +6392,10 @@
         closeMenu();
         if (action === "unmonitor") {
           this.unmonitorModel(stockId);
+          return;
+        }
+        if (action === "alert") {
+          UIPanels.openPriceAlertPanel(stockId);
           return;
         }
         UIPanels.openTradePanel(action, stockId);
