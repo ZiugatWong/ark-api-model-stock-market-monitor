@@ -82,6 +82,17 @@ docker compose down -v
 
 ## Dashboard 页面
 
+<table>
+  <tr>
+    <td align="center"><img src="https://raw.githubusercontent.com/ZiugatWong/ark-api-model-stock-market-monitor/main/stock-data-service/assets/dashboard_desktop.png" width="90%" /></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/ZiugatWong/ark-api-model-stock-market-monitor/main/stock-data-service/assets/dashboard_mobile.png" /></td>
+  </tr>
+  <tr>
+    <td align="center">桌面端</td>
+    <td align="center">移动端</td>
+  </tr>
+</table>
+
 浏览器访问 `http://localhost:3210/dashboard` 即可打开 dashboard：
 
 - **网格总览**：每个模型一张走势卡片（名称、停滞徽章、现价、最新涨跌幅、SVG 迷你走势线），响应式网格（移动端 1 列 → 桌面最多 4 列）

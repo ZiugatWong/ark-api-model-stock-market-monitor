@@ -133,6 +133,18 @@ class SyncScheduler {
 
       await pipeline.exec();
 
+      // 计数 > 0 表示上次成功清零之后发生过失败。本次响应的 ticks 含最近若干轮历史，
+      // 据此补回失败轮次缺失的点（只补不覆盖）。读计数失败时返回 0，跳过补漏。
+      // 补漏单独捕获：失败不能冒泡，否则会计入失败并挡住下面的计数清零。
+      const hadFailures = (await notificationService.getFailureCount()) > 0;
+      if (hadFailures) {
+        try {
+          await priceStorage.backfillAll(ticks);
+        } catch (error) {
+          logger.error("定时同步", "失败后补漏失败:", error.message);
+        }
+      }
+
       // 成功后重置失败计数器
       await notificationService.resetFailureCount();
 
