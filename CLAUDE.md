@@ -60,7 +60,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 - **交易历史**：交易成功后在 `DataProcessor.recordTrade`（行 ~907）写入 `data.tradeHistory[stockId]`（按 id 去重、升序）；接口不提供交易历史，仅供本脚本展示与图表标记
 - **交易记录面板**：模型下拉筛选（默认「全部」，模型名按英文 A→Z 排）+ 表格（时间/模型/方向/价格/股数/成交额/手续费/余额变化），买绿卖红；无清空按钮（本地数据不可恢复）
 - **走势图交易标记**：`Chart.enrichWithTradePrices`(补入交易价数据点) + `Chart.convertToMarkers`(吸附到数据点) + `series.setMarkers`，买绿 `#00A854` 卖红 `#F55454`；均复用已有死代码函数
-- **右键菜单**：`UIRenderers.showTradeContextMenu` 取代原 `showColorMenu`，卖出生效项需有持仓，颜色标识下沉为二级浮层（`_buildColorSubmenu`）；另含「提醒设置」（打开该模型的提醒价格设定面板）与「取消监控」
+- **快捷菜单**：`UIRenderers.showQuickContextMenu` 取代原 `showColorMenu`，卖出生效项需有持仓，颜色标识下沉为二级浮层（`_buildColorSubmenu`）；另含「提醒设置」（打开该模型的提醒价格设定面板）与「取消监控」
 - **主键策略**：全部用 stockId 串联，展示模型名时通过 `idToModel` 查表（规避模型改名/重名风险）
 - **价格历史时间戳**：stale=false（活跃）模型，取 ticks 前 n 条按 stockId 匹配的 createdAt（秒）
 - **stale 语义**：`stale === false` 表示数据新鲜/活跃（本轮有 tick），套利幅度榜为「未停滞」，显示绿色；`stale === true` 表示数据陈旧（无 tick），为「停滞」，显示红色

@@ -2752,8 +2752,8 @@
       background: var(--ark-btn-2-hover);
     }
 
-    /* 右键交易菜单（一级项目录） */
-    .ark-trade-menu {
+    /* 右键快捷菜单（一级项目录） */
+    .ark-quick-menu {
       min-width: 120px;
       padding: 6px;
     }
@@ -5119,7 +5119,7 @@
                 <div>小提示：</div>
                 <div>1. <span style="color:#F55454">红字</span>表示较前一时刻价格上涨，<span style="color:#00A854">绿字</span>表示较前一时刻价格下跌</div>
                 <div>2. 表头模型名称为<span style="color:#a855f7">紫色</span>表示有持仓，名称前的🔒表示持仓锁定中</div>
-                <div>3. 表头模型名称处右键点击可打开交易菜单：买入 / 卖出 / 颜色标识（优先级低于持仓颜色）/ 提醒设置 / 取消监控</div>
+                <div>3. 表头模型名称处右键点击可打开快捷菜单：买入 / 卖出 / 颜色标识（优先级低于持仓颜色）/ 提醒设置 / 取消监控</div>
                 <div>4. 点击表头模型名称可查看该模型分时图：</div>
                 <pre>① 分时图窗口可拖拽改变大小\n② 分时图内拖拽可移动时间窗口\n③ 数据线和坐标轴处可通过鼠标滚轮实现范围缩放</pre>
               </span>
@@ -6159,7 +6159,7 @@
         if (!link) return;
         e.preventDefault();
         const stockId = Number(link.getAttribute("data-stock-id"));
-        UIRenderers.showTradeContextMenu(e, stockId, Storage.load());
+        UIRenderers.showQuickContextMenu(e, stockId, Storage.load());
       });
     },
 
@@ -6332,24 +6332,24 @@
       return null;
     },
 
-    // 关闭右键交易菜单（一级 + 颜色标识二级浮层），统一清理 document 级监听
-    _closeTradeMenu() {
-      if (this._tradeMenuClose) {
-        this._tradeMenuClose();
-        this._tradeMenuClose = null;
+    // 关闭右键快捷菜单（一级 + 颜色标识二级浮层），统一清理 document 级监听
+    _closeQuickMenu() {
+      if (this._quickMenuClose) {
+        this._quickMenuClose();
+        this._quickMenuClose = null;
       }
     },
 
-    // 表头模型名称右键菜单：买入 / 卖出 / 颜色标识（独立二级浮层）/ 取消监控
-    showTradeContextMenu(e, stockId, data) {
+    // 表头模型名称右键快捷菜单：买入 / 卖出 / 颜色标识（独立二级浮层）/ 提醒设置 / 取消监控
+    showQuickContextMenu(e, stockId, data) {
       // 右击已有菜单：先关旧的，再在新位置重建
-      this._closeTradeMenu();
+      this._closeQuickMenu();
 
       const hasPosition = !!data.positions?.[stockId];
 
       // 一级菜单容器（复用 .ark-color-menu 外壳样式）
       const menu = document.createElement("div");
-      menu.className = "ark-color-menu ark-trade-menu";
+      menu.className = "ark-color-menu ark-quick-menu";
       menu.innerHTML = `
         <div class="ark-menu-item" data-action="buy"><span>买入</span></div>
         <div class="ark-menu-item${hasPosition ? "" : " ark-menu-item-disabled"}" data-action="sell"><span>卖出</span></div>
@@ -6374,7 +6374,7 @@
         closeSubmenu();
         menu.remove();
       };
-      this._tradeMenuClose = closeMenu;
+      this._quickMenuClose = closeMenu;
 
       // 一级菜单点击：买入/卖出 → 关菜单开面板；颜色标识 → 切换二级浮层；取消监控 → 确认后移除
       menu.addEventListener("click", (ev) => {
