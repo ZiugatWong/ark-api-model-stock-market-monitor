@@ -2,7 +2,7 @@
 // @name         Ark API 模型股市监控
 // @description  Ark 模型股市数据聚合分析与价格变动通知（game.arkengine.me）
 // @namespace    http://tampermonkey.net/
-// @version      1.0.11
+// @version      1.0.12
 // @author       ziugat
 // @license      GPL-3.0
 // @homepage     https://github.com/ZiugatWong/ark-api-model-stock-market-monitor
@@ -1936,34 +1936,6 @@
       text-decoration: underline;
     }
 
-    .ark-model-input-row {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 8px;
-    }
-    .ark-model-input-row input {
-      flex: 1;
-      padding: 6px 10px;
-      border-radius: 6px;
-      border: 1px solid #444;
-      background: #2a2a2a;
-      color: #f0f0f0;
-      font-size: 13px;
-      outline: none;
-    }
-    .ark-model-input-row input:focus { border-color: #89b4fa; }
-    .ark-model-input-row button {
-      padding: 5px 12px;
-      border-radius: 5px;
-      border: none;
-      background: #89b4fa;
-      color: #1e1e2e;
-      font-weight: 600;
-      cursor: pointer;
-      font-size: 12px;
-    }
-    .ark-model-input-row button:hover { background: #b4befe; }
-
     .ark-model-list {
       display: flex;
       flex-wrap: wrap;
@@ -2048,12 +2020,11 @@
     .ark-minute-input:focus { border-color: #89b4fa; }
 
     .ark-blue-btn {
-      padding: 5px 14px;
-      border-radius: 5px;
+      padding: 4px 12px;
+      border-radius: 4px;
       border: none;
       background: #89b4fa;
       color: #1e1e2e;
-      font-weight: 600;
       cursor: pointer;
       font-size: 12px;
     }
@@ -2063,7 +2034,7 @@
     .ark-gray-btn {
       padding: 4px 12px;
       border-radius: 4px;
-      border: 1px solid var(--ark-border-2);
+      border: none;
       background: var(--ark-btn-2);
       color: var(--ark-text);
       cursor: pointer;
@@ -2381,12 +2352,6 @@
       gap: 6px;
       justify-content: flex-end;
     }
-    .ark-model-add-btn {
-      background: #89b4fa;
-      color: #1e1e2e;
-      font-weight: 600;
-    }
-    .ark-model-add-btn:hover { background: #b4befe; }
 
     .chart-loading-overlay {
       position: absolute;
@@ -2613,7 +2578,6 @@
 
     /* 表单：输入框 / 下拉框 */
     body.ark-theme-light .ark-minute-input,
-    body.ark-theme-light .ark-model-input-row input,
     body.ark-theme-light .ark-trades-model-select,
     body.ark-theme-light .ark-arbitrage-sort-select,
     body.ark-theme-light .ark-model-selector-input,
@@ -3926,7 +3890,7 @@
                 </div>
                 <div class="ark-model-actions">
                   <button class="ark-gray-btn" id="ark-model-clear-selection">清空选择</button>
-                  <button class="ark-model-add-btn" id="ark-model-add-selected">添加选中的模型</button>
+                  <button class="ark-blue-btn" id="ark-model-add-selected">添加选中的模型</button>
                 </div>
               </div>
             </div>
@@ -6405,7 +6369,8 @@
       }
       html += "</div>";
       if (currentColor) {
-        html += '<button class="ark-gray-btn ark-color-remove">移除颜色</button>';
+        html +=
+          '<button class="ark-gray-btn ark-color-remove">移除颜色</button>';
       }
       submenu.innerHTML = html;
 
