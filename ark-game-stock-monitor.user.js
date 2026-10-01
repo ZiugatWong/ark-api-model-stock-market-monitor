@@ -2060,17 +2060,16 @@
     .ark-blue-btn:hover { background: #b4befe; }
     .ark-blue-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .ark-green-btn {
-      padding: 5px 14px;
-      border-radius: 5px;
-      border: none;
+    .ark-gray-btn {
+      padding: 4px 12px;
+      border-radius: 4px;
+      border: 1px solid var(--ark-border-2);
       background: var(--ark-btn-2);
       color: var(--ark-text);
-      font-weight: 600;
       cursor: pointer;
       font-size: 12px;
     }
-    .ark-green-btn:hover { background: var(--ark-btn-2-hover); }
+    .ark-gray-btn:hover { background: var(--ark-btn-2-hover); }
 
     .ark-table-wrap {
       overflow-x: auto;
@@ -2345,16 +2344,6 @@
       font-size: 12px;
       outline: none;
     }
-    .ark-model-dropdown-header button {
-      padding: 4px 8px;
-      border-radius: 4px;
-      border: none;
-      background: #555;
-      color: #f0f0f0;
-      font-size: 11px;
-      cursor: pointer;
-    }
-    .ark-model-dropdown-header button:hover { background: #666; }
     .ark-model-dropdown-list {
       max-height: 200px;
       overflow-y: auto;
@@ -2381,17 +2370,10 @@
       color: var(--ark-muted);
     }
     .ark-model-error { color: #ff6b6b; }
-    .ark-model-error button {
+    .ark-model-error .ark-gray-btn {
+      display: inline-block;
       margin-top: 6px;
-      padding: 4px 8px;
-      border-radius: 4px;
-      border: none;
-      background: #555;
-      color: #f0f0f0;
-      font-size: 11px;
-      cursor: pointer;
     }
-    .ark-model-error button:hover { background: #666; }
     .ark-model-actions {
       padding: 8px;
       border-top: 1px solid #444;
@@ -2399,15 +2381,6 @@
       gap: 6px;
       justify-content: flex-end;
     }
-    .ark-model-actions button {
-      padding: 4px 12px;
-      border-radius: 4px;
-      border: none;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    .ark-model-clear-btn { background: #555; color: #f0f0f0; }
-    .ark-model-clear-btn:hover { background: #666; }
     .ark-model-add-btn {
       background: #89b4fa;
       color: #1e1e2e;
@@ -2480,8 +2453,8 @@
       --ark-chip: #e9ecef;
       --ark-border: #e2e5e9;
       --ark-border-2: #ced4da;
-      --ark-btn-2: #e9ecef;
-      --ark-btn-2-hover: #dde1e6;
+      --ark-btn-2: #ced4da;
+      --ark-btn-2-hover: #b8c0c8;
       --ark-text: #1f2933;
       --ark-text-strong: #0b1220;
       --ark-label: #5a6066;
@@ -2665,19 +2638,6 @@
       background: var(--ark-elevated);
     }
 
-    /* 表单：次级按钮 */
-    body.ark-theme-light .ark-model-dropdown-header button,
-    body.ark-theme-light .ark-model-clear-btn,
-    body.ark-theme-light .ark-model-error button {
-      background: var(--ark-btn-2);
-      color: var(--ark-text);
-    }
-    body.ark-theme-light .ark-model-dropdown-header button:hover,
-    body.ark-theme-light .ark-model-clear-btn:hover,
-    body.ark-theme-light .ark-model-error button:hover {
-      background: var(--ark-btn-2-hover);
-    }
-
     /* 开关关闭态 */
     body.ark-theme-light .ark-toggle .slider {
       background: var(--ark-border-2);
@@ -2735,21 +2695,8 @@
     }
     .ark-color-remove {
       display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      padding: 8px 12px;
-      border-radius: 6px;
-      background: var(--ark-chip);
-      color: var(--ark-text);
-      font-size: 12px;
-      margin-top: 8px;
-      border: none;
       width: 100%;
-      transition: background 0.2s ease;
-    }
-    .ark-color-remove:hover {
-      background: var(--ark-btn-2-hover);
+      margin-top: 8px;
     }
 
     /* 右键快捷菜单（一级项目录） */
@@ -3971,14 +3918,14 @@
               <div class="ark-model-dropdown" id="ark-model-dropdown">
                 <div class="ark-model-dropdown-header">
                   <input type="text" class="ark-model-dropdown-search" id="ark-model-dropdown-search" placeholder="搜索模型..." />
-                  <button class="ark-model-select-all" id="ark-model-select-all">全选</button>
-                  <button class="ark-model-clear-all" id="ark-model-clear-all">清空</button>
+                  <button class="ark-gray-btn" id="ark-model-select-all">全选</button>
+                  <button class="ark-gray-btn" id="ark-model-clear-all">清空</button>
                 </div>
                 <div class="ark-model-dropdown-list" id="ark-model-dropdown-list">
                   <div class="ark-model-loading">加载模型中...</div>
                 </div>
                 <div class="ark-model-actions">
-                  <button class="ark-model-clear-btn" id="ark-model-clear-selection">清空选择</button>
+                  <button class="ark-gray-btn" id="ark-model-clear-selection">清空选择</button>
                   <button class="ark-model-add-btn" id="ark-model-add-selected">添加选中的模型</button>
                 </div>
               </div>
@@ -4206,7 +4153,7 @@
           allModels = await API.fetchAvailableModels();
           if (allModels.length === 0) {
             modelDropdownList.innerHTML =
-              '<div class="ark-model-error">未找到可用模型<br/><button id="ark-model-retry-btn">重试</button></div>';
+              '<div class="ark-model-error">未找到可用模型<br/><button class="ark-gray-btn" id="ark-model-retry-btn">重试</button></div>';
             panel
               .querySelector("#ark-model-retry-btn")
               ?.addEventListener("click", loadModelList);
@@ -4216,7 +4163,7 @@
         } catch (error) {
           console.error("[Ark Stock Monitor] 加载模型列表失败:", error);
           modelDropdownList.innerHTML =
-            '<div class="ark-model-error">加载失败<br/><button id="ark-model-retry-btn">重试</button></div>';
+            '<div class="ark-model-error">加载失败<br/><button class="ark-gray-btn" id="ark-model-retry-btn">重试</button></div>';
           panel
             .querySelector("#ark-model-retry-btn")
             ?.addEventListener("click", loadModelList);
@@ -4378,7 +4325,7 @@
             <div class="ark-trigger-row">
               <span style="color:var(--ark-label);font-size:12px;">定时获取时间所匹配的分钟尾数：</span>
               <input type="text" class="ark-minute-input" id="ark-minute-ends" placeholder="如 3,8" title="如填 3,8 代表每小时的 03、08、13、18...分钟，会自动触发行情获取" />
-              <button class="ark-green-btn" id="ark-save-minute-btn">保存</button>
+              <button class="ark-gray-btn" id="ark-save-minute-btn">保存</button>
             </div>
           </div>
         </div>
@@ -4519,7 +4466,7 @@
               <select id="ark-notif-model-select" class="ark-minute-input" style="width: 260px; background: var(--ark-input); border: 1px solid var(--ark-border-2); color: var(--ark-text); padding: 5px 10px; border-radius: 6px;">
                 <option value="">全部模型</option>
               </select>
-              <button class="ark-green-btn" id="ark-add-notif-btn" style="margin-left: 10px;">添加</button>
+              <button class="ark-gray-btn" id="ark-add-notif-btn" style="margin-left: 10px;">添加</button>
             </div>
             <div id="ark-notif-list" style="margin-top: 10px; max-height: 250px; overflow-y: auto;"></div>
           </div>
@@ -4793,7 +4740,7 @@
             <div id="ark-price-alert-status" style="margin-top: 6px; font-size: 11px; min-height: 16px;"></div>
             <div class="ark-trigger-row" id="ark-price-alert-actions" style="margin-top: 8px; justify-content: center;">
               <button class="ark-blue-btn" id="ark-price-alert-confirm">确定</button>
-              <button class="ark-green-btn" id="ark-price-alert-cancel" style="margin-left: 8px;">取消</button>
+              <button class="ark-gray-btn" id="ark-price-alert-cancel" style="margin-left: 8px;">取消</button>
             </div>
           </div>
         </div>
@@ -4887,7 +4834,7 @@
               <input type="number" class="ark-minute-input" id="ark-price-days-limit"
                     placeholder="天数" min="1" step="1" value="${data.priceDataDaysLimit}"
                     style="width: 80px;" />
-              <button class="ark-green-btn" id="ark-save-price-days-btn">保存</button>
+              <button class="ark-gray-btn" id="ark-save-price-days-btn">保存</button>
             </div>
             <div style="margin-top: 8px; font-size: 11px; color: var(--ark-muted);">
               注：设置后不会立即清理，待第二天第一次获取数据时才自动清理超出时间范围的数据
@@ -5465,16 +5412,16 @@
             <div class="ark-trade-value-hint" id="ark-trade-value-hint"></div>
             <div class="ark-trade-quick-label" id="ark-trade-quick-label">填入全部可用量的：</div>
             <div class="ark-trade-quick-grid" id="ark-trade-quick-row">
-              <button class="ark-green-btn" data-ratio="all">全部</button>
-              <button class="ark-green-btn" data-ratio="half">1/2</button>
-              <button class="ark-green-btn" data-ratio="quarter">1/4</button>
-              <button class="ark-green-btn" data-ratio="tenth">1/10</button>
+              <button class="ark-gray-btn" data-ratio="all">全部</button>
+              <button class="ark-gray-btn" data-ratio="half">1/2</button>
+              <button class="ark-gray-btn" data-ratio="quarter">1/4</button>
+              <button class="ark-gray-btn" data-ratio="tenth">1/10</button>
             </div>
             <div class="ark-trade-lock" id="ark-trade-lock" hidden></div>
             <div class="ark-trade-status" id="ark-trade-status"></div>
             <div class="ark-trade-actions">
               <button class="ark-blue-btn" id="ark-trade-confirm">确定</button>
-              <button class="ark-green-btn" id="ark-trade-cancel">取消</button>
+              <button class="ark-gray-btn" id="ark-trade-cancel">取消</button>
             </div>
           </div>
         </div>
@@ -6458,7 +6405,7 @@
       }
       html += "</div>";
       if (currentColor) {
-        html += '<button class="ark-color-remove">移除颜色</button>';
+        html += '<button class="ark-gray-btn ark-color-remove">移除颜色</button>';
       }
       submenu.innerHTML = html;
 
