@@ -2,7 +2,7 @@
 // @name         Ark API 模型股市监控
 // @description  Ark 模型股市数据聚合分析与价格变动通知（game.arkengine.me）
 // @namespace    http://tampermonkey.net/
-// @version      1.0.12
+// @version      1.0.13
 // @author       ziugat
 // @license      GPL-3.0
 // @homepage     https://github.com/ZiugatWong/ark-api-model-stock-market-monitor
@@ -581,8 +581,10 @@
         .then((response) => {
           if (response && Array.isArray(response.stocks)) {
             const stockIds = response.stocks.map((s) => s.id);
-            // 仅刷新 idToModel 映射，模型选择器从 Object.keys 取列表
-            data.idToModel = {};
+            // 增量合并 idToModel：只增改本次返回的模型，不删除已有映射。
+            // 接口偶发漏返回模型时，已记录的名字不会丢失（模型选择器仍从本次
+            // 返回的 stockIds 取列表，不受合并影响）。
+            data.idToModel = data.idToModel || {};
             for (const s of response.stocks) data.idToModel[s.id] = s.modelName;
             data.availableModelsLastFetched = now;
             Storage.save(data);
@@ -696,8 +698,9 @@
       // 缓存市场状态与规则
       data.marketRules = { enabled: response.enabled, rules: response.rules };
 
-      // 刷新 idToModel 映射 + 构建现价映射（stockId → 代币）
-      const idToModel = {};
+      // 增量合并 idToModel（只增改、不删除）+ 构建现价映射（stockId → 代币）。
+      // 接口偶发漏返回模型时，保留上一轮记录的名字，避免表头/提醒等回退成显示 id。
+      const idToModel = data.idToModel || {};
       const priceMap = {}; // stockId → 现价(代币)
       for (const s of stocks) {
         idToModel[s.id] = s.modelName;
@@ -705,59 +708,38 @@
       }
       data.idToModel = idToModel;
 
-      // 价格历史：用 stale=false 过滤活跃（新鲜）模型，ticks 前 n 条与活跃模型按 stockId 一一对应
-      // 注：stale=false 表示数据新鲜（本轮有 tick），stale=true 表示数据陈旧（无 tick）。
-      //     ticks 每轮把活跃模型放最前面，前 n 条与活跃模型一一对应（不重复，降序）。
-      const activeStocks = stocks.filter((s) => s.stale === false);
-      const n = activeStocks.length;
+      // 价格历史：直接以 ticks 判断最新一批，价格也取自 ticks，不再依赖 stocks
+      //（stocks 可能漏返回模型）。
+      // ticks 按时间降序，第一条即时间最大的一条；取它的时间戳为基准，
+      // 窗口内（基准往前 4 分半以内）的 tick 视为同一批最新数据，
+      // 时间戳统一为该最大时间戳。同一模型在窗口内有多条时只保留最新一条
+      //（ticks 降序，遍历时遇到的第一条即最新，价格也取它的）。
       const ticks = Array.isArray(response.ticks) ? response.ticks : [];
-      const ticksSlice = ticks.slice(0, n);
-
-      // 时间戳归一化：收集所有活跃 tick 的时间戳，统一为最大时间戳
-      const activeTimestamps = ticksSlice.map((t) =>
-        Math.floor(Date.parse(t.createdAt) / 1000),
-      );
-
-      let unifiedTimestamp = null;
-      if (activeTimestamps.length > 0) {
-        const maxTimestamp = Math.max(...activeTimestamps);
-        const minTimestamp = Math.min(...activeTimestamps);
-
-        // 如果最大最小时间戳差距超过 5 分钟（300 秒），说明存在旧数据
-        // 过滤掉超过 5 分钟的旧数据，只保留最新一批
-        const threshold =
-          maxTimestamp - minTimestamp > 300 ? maxTimestamp - 300 : minTimestamp;
-
-        // 统一时间戳为最大时间戳
-        unifiedTimestamp = maxTimestamp;
-
-        // 过滤 ticksSlice，只保留时间戳 >= threshold 的 tick
-        const filteredTicksSlice = ticksSlice.filter((t) => {
+      const tickByStockId = {}; // stockId → { ts: 统一时间戳, price: 代币 }
+      if (ticks.length > 0) {
+        const maxTimestamp = Math.floor(Date.parse(ticks[0].createdAt) / 1000);
+        const threshold = maxTimestamp - 270; // 4 分半
+        for (const t of ticks) {
           const ts = Math.floor(Date.parse(t.createdAt) / 1000);
-          return ts >= threshold;
-        });
-
-        // 重新构建 tickByStockId，使用统一时间戳
-        var tickByStockId = {}; // stockId → 统一后的时间戳
-        for (const t of filteredTicksSlice) {
+          if (ts < threshold) break; // 降序，更早的都在窗口外
           if (tickByStockId[t.stockId] === undefined) {
-            tickByStockId[t.stockId] = unifiedTimestamp;
+            tickByStockId[t.stockId] = {
+              ts: maxTimestamp,
+              price: parseFloat((t.priceCents / 100).toFixed(2)),
+            };
           }
         }
-      } else {
-        var tickByStockId = {};
       }
 
-      for (const s of activeStocks) {
-        if (!monitoredIdSet.has(s.id)) continue; // 仅处理用户监控的 stockId
-        const price = parseFloat((s.priceCents / 100).toFixed(2));
-        const ts = tickByStockId[s.id];
-        if (ts === undefined) continue; // 无对应 tick，跳过
+      for (const stockIdStr of Object.keys(tickByStockId)) {
+        const stockId = Number(stockIdStr);
+        if (!monitoredIdSet.has(stockId)) continue; // 仅处理用户监控的 stockId
+        const { ts, price } = tickByStockId[stockIdStr];
 
-        if (!data.priceData[s.id]) data.priceData[s.id] = [];
-        const list = data.priceData[s.id];
+        if (!data.priceData[stockId]) data.priceData[stockId] = [];
+        const list = data.priceData[stockId];
         if (list.length && list[list.length - 1][0] === ts) {
-          deduplicatedStockIds.push(s.id); // 同时间戳已存在
+          deduplicatedStockIds.push(stockId); // 同时间戳已存在
         } else {
           list.push([ts, price]);
         }

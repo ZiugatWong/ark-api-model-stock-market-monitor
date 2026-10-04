@@ -62,7 +62,7 @@ Tampermonkey 脚本，为 game.arkengine.me 的 Ark API 模型股市创建监控
 - **走势图交易标记**：`Chart.enrichWithTradePrices`(补入交易价数据点) + `Chart.convertToMarkers`(吸附到数据点) + `series.setMarkers`，买绿 `#00A854` 卖红 `#F55454`；均复用已有死代码函数
 - **快捷菜单**：`UIRenderers.showQuickContextMenu` 取代原 `showColorMenu`，卖出生效项需有持仓，颜色标识下沉为二级浮层（`_buildColorSubmenu`）；另含「提醒设置」（打开该模型的提醒价格设定面板）与「取消监控」
 - **主键策略**：全部用 stockId 串联，展示模型名时通过 `idToModel` 查表（规避模型改名/重名风险）
-- **价格历史时间戳**：stale=false（活跃）模型，取 ticks 前 n 条按 stockId 匹配的 createdAt（秒）
+- **价格历史**：直接以 ticks 判断最新一批，不再依赖 stocks 的 stale 计数（stocks 可能漏返回模型）。ticks 按时间降序，以第一条（时间最大）的 createdAt 为基准，取其往前 4 分半窗口内的 tick 作为同一批，时间戳统一为该最大时间戳、价格取 tick 自身的 priceCents；同一模型窗口内有多条时只保留最新一条（降序下第一条）
 - **stale 语义**：`stale === false` 表示数据新鲜/活跃（本轮有 tick），套利幅度榜为「未停滞」，显示绿色；`stale === true` 表示数据陈旧（无 tick），为「停滞」，显示红色
 - **价格单位**：代币（priceCents/100），1 代币 = 100 分；余额 tokens 为整数代币
 - **持仓派生**：费率从 `rules.buyFeePct`/`sellFeePct` 取（非硬编码），现价从 stocks 映射
