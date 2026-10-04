@@ -13,6 +13,7 @@ const logger = require("../utils/logger");
  * - 未命中 → 拉上游归一化并回写两级缓存
  * - 上游失败 → stock_models:lastgood 兜底缓存（TTL 24 小时）返回旧数据（附 staleCache）
  * - 兜底也缺失 → 抛错（由 asyncHandler 捕获返回 500）
+ * 写入为增量合并：接口偶发漏返回模型时，保留缓存里上一轮的记录，只增改不删除。
  */
 class ModelsService {
   /**
@@ -69,23 +70,31 @@ class ModelsService {
 
   /**
    * 从 stocks 数组预热缓存（供定时同步调用，与同步同节奏刷新）
+   * 增量合并：以缓存中已有模型为底，本次返回的同 id 模型覆盖其字段，
+   * 本次未返回的模型保留原记录（接口偶发漏返回模型时不丢），不做删除。
    * @param {Array} stocks - 上游 /api/stock 的 stocks 数组
    * @param {Object} [opts]
    * @param {boolean} [opts.throwIfEmpty] - stocks 为空时抛错（fetchAndCache 场景）
-   * @returns {Promise<Object>} 归一化后的 payload
+   * @returns {Promise<Object|null>} 合并后的 payload，预热场景无数据时返回 null
    */
   async warmFromStocks(stocks, { throwIfEmpty = false } = {}) {
-    const models = this._normalizeStocks(stocks);
-    if (models.length === 0) {
+    const incoming = this._normalizeStocks(stocks);
+    if (incoming.length === 0) {
       if (throwIfEmpty) {
         throw new Error("上游行情 stocks 数据为空或格式无效");
       }
       return null; // 预热场景静默跳过
     }
 
+    // 以上次快照为底合并。读兜底缓存而非主缓存：主缓存 TTL 仅 5 分钟，
+    // 过期后就读不到上一轮记录了，而兜底缓存保留 24 小时。
+    const cached = await this._readPayload(REDIS_KEYS.MODELS_LASTGOOD);
+    const merged = new Map((cached?.models || []).map((m) => [m.id, m]));
+    for (const model of incoming) merged.set(model.id, model);
+
     const payload = {
-      models,
-      count: models.length,
+      models: Array.from(merged.values()),
+      count: merged.size,
       cachedAt: Math.floor(Date.now() / 1000),
     };
     const serialized = JSON.stringify(payload);
@@ -105,6 +114,24 @@ class ModelsService {
     await pipeline.exec();
 
     return payload;
+  }
+
+  /**
+   * 读取并解析缓存中的模型列表 payload
+   * @param {string} key - Redis 键
+   * @returns {Promise<Object|null>} 解析失败或不存在时返回 null
+   */
+  async _readPayload(key) {
+    const raw = await redis.get(key);
+    if (!raw) return null;
+    try {
+      const payload = JSON.parse(raw);
+      if (!payload || !Array.isArray(payload.models)) return null;
+      return payload;
+    } catch (error) {
+      logger.warn("模型列表", "缓存数据解析失败，忽略旧数据:", error.message);
+      return null;
+    }
   }
 
   /**

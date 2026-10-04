@@ -44,22 +44,22 @@ class PriceStorage {
   }
 
   /**
-   * 补漏全量检查所有模型：从 API 的 ticks 还原出同一批数据，再做归一化后核对 Redis 缺失项并补充。
+   * 补漏全量检查所有模型：从 API 的 ticks 还原出各轮数据，核对 Redis 缺失的时间戳并补充。
    *
-   * 必须复刻定时同步（syncScheduler.syncPrices）的归一化规则：
-   * - 分批：ticks 中「模型连续不重复」划为一批，出现已在本批内的模型 → 下一批
-   * - 每批内过滤与批内最大时间戳差超 5 分钟（300s）的旧数据，剩余时间戳统一为该批最大时间戳
-   * - 只按时间戳判缺、补缺失点，不覆盖已有不同价格的同时间戳数据
-   * @param {Array} ticks - GET /api/stock 返回的 ticks 数组
+   * 分轮规则与定时同步（syncScheduler.syncPrices）、用户脚本一致：
+   * ticks 按时间降序，以第一条为基准取往前 4 分半（270s）窗口为一轮，时间戳统一为该轮基准，
+   * 同模型只保留最新一条、价格取 tick 自身的 priceCents；然后从窗口之后继续，逐轮切分。
+   * 只按时间戳判缺、补缺失点，不覆盖已有不同价格的同时间戳数据。
+   * @param {Array} ticks - GET /api/stock 返回的 ticks 数组（时间降序）
    * @returns {Promise<Object>} { modelCount, perModel }（perModel: { [stockId]: 补入数量 }，仅含实际补入的模型）
    */
   async backfillAll(ticks) {
     const perModel = new Map(); // stockId -> Map(ts -> price)
-    for (const batch of this._groupBatches(Array.isArray(ticks) ? ticks : [])) {
-      for (const pt of this._normalizeBatch(batch)) {
+    for (const round of this._splitRounds(Array.isArray(ticks) ? ticks : [])) {
+      for (const pt of round) {
         if (!perModel.has(pt.stockId)) perModel.set(pt.stockId, new Map());
         const m = perModel.get(pt.stockId);
-        if (!m.has(pt.ts)) m.set(pt.ts, pt.price); // ts 去重
+        if (!m.has(pt.ts)) m.set(pt.ts, pt.price); // ts 去重，保留先遇到的（较新的一轮）
       }
     }
 
@@ -125,59 +125,44 @@ class PriceStorage {
   }
 
   /**
-   * 分批：ticks 中「模型连续不重复」划为一批，出现已在本批内的模型 → 开启下一批
-   * @param {Array} ticks
-   * @returns {Array<Array>} 批次数组
+   * 按轮切分 ticks：ticks 按时间降序，每轮以当前剩余第一条为基准，
+   * 取其往前 4 分半（270s）窗口内的 tick，时间戳统一为该基准，同模型只保留最新一条，
+   * 价格取 tick 自身的 priceCents。与定时同步、用户脚本的取数规则一致。
+   * @param {Array} ticks - 时间降序的 ticks
+   * @returns {Array<Array<{stockId,ts,price}>>} 各轮的数据点
    */
-  _groupBatches(ticks) {
-    const batches = [];
-    let cur = [];
-    let seen = new Set();
-    for (const t of ticks) {
-      const id = Number(t.stockId);
-      if (seen.has(id)) {
-        batches.push(cur);
-        cur = [];
-        seen = new Set();
-      }
-      cur.push(t);
-      seen.add(id);
-    }
-    if (cur.length) batches.push(cur);
-    return batches;
-  }
-
-  /**
-   * 归一化单批：过滤与批内最大时间戳差超 5 分钟（300s）的旧数据，剩余时间戳统一为批内最大时间戳。
-   * price 沿用每个 tick 自带的 priceCents。
-   * @param {Array} batch
-   * @returns {Array<{stockId,ts,price}>}
-   */
-  _normalizeBatch(batch) {
+  _splitRounds(ticks) {
     const now = Math.floor(Date.now() / 1000);
-    const pts = batch
-      .map((t) => ({
-        stockId: Number(t.stockId),
-        ts: Math.floor(Date.parse(t.createdAt) / 1000),
-        price: parseFloat((t.priceCents / 100).toFixed(2)),
-      }))
-      .filter(
-        (p) =>
-          Number.isInteger(p.stockId) &&
-          !Number.isNaN(p.ts) &&
-          !Number.isNaN(p.price) &&
-          p.ts > now - DATA_RETENTION_SECONDS, // 只补保留期内的数据
-      );
-    if (pts.length === 0) return [];
+    const rounds = [];
+    let i = 0;
+    while (i < ticks.length) {
+      const maxT = Math.floor(Date.parse(ticks[i].createdAt) / 1000);
+      if (Number.isNaN(maxT)) {
+        i++;
+        continue;
+      }
+      // 基准已超出保留期，更早的 tick 也都超出，无需继续
+      if (maxT <= now - DATA_RETENTION_SECONDS) break;
 
-    const tsList = pts.map((p) => p.ts);
-    const maxT = Math.max(...tsList);
-    const minT = Math.min(...tsList);
-    const threshold = maxT - minT > 300 ? maxT - 300 : minT;
-
-    return pts
-      .filter((p) => p.ts >= threshold)
-      .map((p) => ({ stockId: p.stockId, ts: maxT, price: p.price }));
+      const threshold = maxT - 270; // 4 分半
+      const seen = new Set();
+      const round = [];
+      while (i < ticks.length) {
+        const t = ticks[i];
+        const ts = Math.floor(Date.parse(t.createdAt) / 1000);
+        if (Number.isNaN(ts) || ts < threshold) break; // 降序，本轮窗口结束
+        i++;
+        const stockId = Number(t.stockId);
+        if (!Number.isInteger(stockId) || seen.has(stockId)) continue;
+        if (t.priceCents === undefined || t.priceCents === null) continue;
+        const price = parseFloat((t.priceCents / 100).toFixed(2));
+        if (Number.isNaN(price)) continue;
+        seen.add(stockId);
+        round.push({ stockId, ts: maxT, price });
+      }
+      if (round.length) rounds.push(round);
+    }
+    return rounds;
   }
 
   /**

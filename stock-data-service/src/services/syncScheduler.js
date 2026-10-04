@@ -16,11 +16,12 @@ const {
 /**
  * 定时同步任务
  *
- * 数据获取逻辑严格复刻用户脚本 ark-game-stock-monitor.user.js 的 DataProcessor（行 594-651）：
- * 1. stale === false 过滤活跃模型，n = 活跃数量
- * 2. ticks.slice(0, n) —— API 每轮把活跃模型放最前，前 n 条与活跃模型一一对应（不重复、降序）
- * 3. 时间戳归一化：所有活跃模型共用本轮 maxTimestamp；若 ticks 跨度 > 5 分钟则过滤掉旧 tick
- * 4. 无匹配 tick 的活跃模型直接跳过，不写入价格数据（不用 Date.now() 兜底，避免污染历史曲线）
+ * 价格数据只取自 ticks，复刻用户脚本 ark-game-stock-monitor.user.js 的 DataProcessor：
+ * 1. ticks 按时间降序，以第一条（时间最大）的 createdAt 为基准
+ * 2. 取基准往前 4 分半（270s）窗口内的 tick 作为同一批最新数据，时间戳统一为该基准
+ * 3. 同一模型窗口内有多条时只保留最新一条（降序下遇到的第一条），价格取 tick 自身的 priceCents
+ * 4. 不再用 stocks 的 stale 计数或 priceCents（stocks 可能漏返回模型）
+ * stocks 仅用于预热 dashboard 模型列表缓存，不参与价格写入。
  */
 class SyncScheduler {
   constructor() {
@@ -46,75 +47,48 @@ class SyncScheduler {
       const marketData = await arkGameApi.fetchMarketData();
       const stocks = Array.isArray(marketData.stocks) ? marketData.stocks : [];
 
-      if (stocks.length === 0) {
-        logger.log("定时同步", "API 返回数据为空");
-        return;
-      }
-
-      // 顺带预热 dashboard 模型列表缓存（与同步同节奏，内部静默失败不影响主流程）
+      // 顺带预热 dashboard 模型列表缓存（与同步同节奏，内部静默失败不影响主流程）。
+      // stocks 只用于模型列表（名称/停滞标志/现价），不参与下面的价格写入。
       await modelsService.warmFromStocks(stocks);
 
-      // 1. 过滤活跃模型（stale === false），n = 活跃数量
-      //    stale=false 表示活跃/新鲜（本轮有 tick）；stale=true 表示陈旧（无 tick）
-      const activeStocks = stocks.filter((s) => s.stale === false);
-      const n = activeStocks.length;
-
-      if (n === 0) {
-        logger.log("定时同步", "无活跃模型（所有 stale=true）");
-        return;
-      }
-
-      // 2. ticks 前 n 条与活跃模型按 stockId 一一对应（降序、不重复）
+      // 价格只取自 ticks：以时间最大的第一条为基准，4 分半窗口内视为同一批，
+      // 时间戳统一为该基准，同模型只保留最新一条（降序下遇到的第一条）。
       const ticks = Array.isArray(marketData.ticks) ? marketData.ticks : [];
-      const ticksSlice = ticks.slice(0, n);
-
-      // 3. 时间戳归一化：统一为 maxTimestamp，过滤 5 分钟外的旧 tick
-      const tickByStockId = {}; // stockId → 统一时间戳（秒）
-      const activeTimestamps = ticksSlice
-        .map((t) => this.toSeconds(t.createdAt))
-        .filter((ts) => !Number.isNaN(ts));
-
-      if (activeTimestamps.length > 0) {
-        const maxTimestamp = Math.max(...activeTimestamps);
-        const minTimestamp = Math.min(...activeTimestamps);
-        // 跨度 > 5 分钟说明混入旧数据，只保留最近 5 分钟内的 tick
-        const threshold =
-          maxTimestamp - minTimestamp > 300 ? maxTimestamp - 300 : minTimestamp;
-        const unifiedTimestamp = maxTimestamp; // 所有活跃模型共用此时间戳
-
-        const filteredTicksSlice = ticksSlice.filter((t) => {
-          const ts = this.toSeconds(t.createdAt);
-          return !Number.isNaN(ts) && ts >= threshold;
-        });
-        for (const t of filteredTicksSlice) {
-          if (tickByStockId[t.stockId] === undefined) {
-            tickByStockId[t.stockId] = unifiedTimestamp;
+      const tickByStockId = {}; // stockId → { ts: 统一时间戳（秒）, price: 代币 }
+      if (ticks.length > 0) {
+        const maxTimestamp = this.toSeconds(ticks[0].createdAt);
+        if (!Number.isNaN(maxTimestamp)) {
+          const threshold = maxTimestamp - 270; // 4 分半
+          for (const t of ticks) {
+            const ts = this.toSeconds(t.createdAt);
+            if (Number.isNaN(ts) || ts < threshold) break; // 降序，更早的都在窗口外
+            const stockId = Number(t.stockId);
+            if (!Number.isInteger(stockId)) continue;
+            if (tickByStockId[stockId] !== undefined) continue; // 已保留最新一条
+            if (t.priceCents === undefined || t.priceCents === null) continue;
+            tickByStockId[stockId] = {
+              ts: maxTimestamp,
+              price: parseFloat((t.priceCents / 100).toFixed(2)), // 转代币
+            };
           }
         }
       }
 
-      // 4. 更新 stockId 列表缓存（取本轮有 tick 的活跃 stockId）
-      const stockIds = Object.keys(tickByStockId)
-        .map(Number)
-        .filter((id) => Number.isInteger(id));
-      if (stockIds.length > 0) {
-        await redis.del(REDIS_KEYS.STOCK_IDS_ALL);
-        await redis.sadd(REDIS_KEYS.STOCK_IDS_ALL, ...stockIds);
-        await redis.expire(REDIS_KEYS.STOCK_IDS_ALL, CACHE_TTL.MODELS_LIST);
+      const stockIds = Object.keys(tickByStockId).map(Number);
+      if (stockIds.length === 0) {
+        logger.log("定时同步", "ticks 窗口内无可用价格数据");
+        return;
       }
 
-      // 5. 批量存储价格数据（按 stockId，仅活跃且有匹配 tick 的）
+      // 更新 stockId 列表缓存（取本轮窗口内有 tick 的 stockId）
+      await redis.del(REDIS_KEYS.STOCK_IDS_ALL);
+      await redis.sadd(REDIS_KEYS.STOCK_IDS_ALL, ...stockIds);
+      await redis.expire(REDIS_KEYS.STOCK_IDS_ALL, CACHE_TTL.MODELS_LIST);
+
+      // 批量存储价格数据（按 stockId）
       const pipeline = redis.pipeline();
-      let writtenCount = 0;
-
-      for (const stock of activeStocks) {
-        const stockId = stock.id;
-        const ts = tickByStockId[stockId];
-        // 无匹配 tick → 跳过，不写入（与脚本一致，不兜底 Date.now()）
-        if (ts === undefined) continue;
-        if (stock.priceCents === undefined || stock.priceCents === null) continue;
-
-        const price = parseFloat((stock.priceCents / 100).toFixed(2)); // 转代币
+      for (const stockId of stockIds) {
+        const { ts, price } = tickByStockId[stockId];
         const key = REDIS_KEYS.PRICE(stockId);
         const member = `${ts}:${price}`;
 
@@ -127,8 +101,6 @@ class SyncScheduler {
         pipeline.zremrangebyscore(key, "-inf", cutoffTime);
         // 设置 TTL（兜底）
         pipeline.expire(key, DATA_TTL_SECONDS);
-
-        writtenCount++;
       }
 
       await pipeline.exec();
@@ -148,10 +120,7 @@ class SyncScheduler {
       // 成功后重置失败计数器
       await notificationService.resetFailureCount();
 
-      logger.log(
-        "定时同步",
-        `同步完成，活跃 ${n} 个，写入 ${writtenCount} 条价格`,
-      );
+      logger.log("定时同步", `同步完成，写入 ${stockIds.length} 条价格`);
     } catch (error) {
       logger.error("定时同步", "同步失败:", error.message);
 
