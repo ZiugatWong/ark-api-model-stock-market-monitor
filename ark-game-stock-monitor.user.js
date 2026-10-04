@@ -698,13 +698,11 @@
       // 缓存市场状态与规则
       data.marketRules = { enabled: response.enabled, rules: response.rules };
 
-      // 增量合并 idToModel（只增改、不删除）+ 构建现价映射（stockId → 代币）。
+      // 增量合并 idToModel（只增改、不删除）。
       // 接口偶发漏返回模型时，保留上一轮记录的名字，避免表头/提醒等回退成显示 id。
       const idToModel = data.idToModel || {};
-      const priceMap = {}; // stockId → 现价(代币)
       for (const s of stocks) {
         idToModel[s.id] = s.modelName;
-        priceMap[s.id] = s.priceCents / 100;
       }
       data.idToModel = idToModel;
 
@@ -743,6 +741,13 @@
         } else {
           list.push([ts, price]);
         }
+      }
+
+      // 现价映射（stockId → 代币）：取本地保存的最新价格，不读 stocks.priceCents
+      const priceMap = {};
+      for (const stockId of Object.keys(data.priceData)) {
+        const list = data.priceData[stockId];
+        if (list && list.length) priceMap[stockId] = list[list.length - 1][1];
       }
 
       // 持仓处理（费率从 rules 取，回退默认 2%/2.5%；键=stockId）
@@ -5598,15 +5603,16 @@
       const name = Utils.getModelName(stockId);
       // 实时数据（fresh.market.stocks 为数组视为有效），否则回退本地快照
       const useFresh = !!fresh && Array.isArray(fresh.market?.stocks);
-      let price;
       let pos;
       let buyFeePct;
       let sellFeePct;
       let balance;
       let marketEnabled;
+      // 价格统一取本地保存的最新价格，不读 stocks.priceCents
+      const priceList = data.priceData?.[stockId];
+      const price =
+        priceList && priceList.length ? priceList[priceList.length - 1][1] : null;
       if (useFresh) {
-        const stock = fresh.market.stocks.find((s) => s.id === stockId);
-        price = stock ? stock.priceCents / 100 : null;
         const rawPos = Array.isArray(fresh.market.positions)
           ? fresh.market.positions.find((p) => p.stockId === stockId)
           : null;
@@ -5624,11 +5630,6 @@
         balance = fresh.balance?.tokens ?? null;
         marketEnabled = fresh.market.enabled;
       } else {
-        const priceList = data.priceData?.[stockId];
-        price =
-          priceList && priceList.length
-            ? priceList[priceList.length - 1][1]
-            : null;
         pos = data.positions?.[stockId] || null;
         const rules = data.marketRules?.rules || {};
         buyFeePct = rules.buyFeePct ?? 2;
@@ -7066,15 +7067,16 @@
           DataProcessor.processMarketData(resp);
 
         // 拉取代币余额（失败静默，不影响主流程）
-        try {
-          const balance = await API.fetchBalance();
-          if (balance && balance.tokens !== undefined) {
-            currentData = Storage.load();
-            currentData.userTokens = balance.tokens;
-            Storage.save(currentData);
+        if (processedData) {
+          try {
+            const balance = await API.fetchBalance();
+            if (balance && balance.tokens !== undefined) {
+              processedData.userTokens = balance.tokens;
+              Storage.save(processedData);
+            }
+          } catch (e) {
+            console.error("[Ark Stock Monitor] 获取代币余额失败:", e);
           }
-        } catch (e) {
-          console.error("[Ark Stock Monitor] 获取代币余额失败:", e);
         }
 
         if (processedData) {
@@ -7098,20 +7100,23 @@
           UIPanels._arbitragePanel &&
           UIPanels._arbitragePanel.classList.contains("visible")
         ) {
-          currentData = Storage.load();
-          const dataToRender = currentData.arbitrageData || [];
+          const latestData = Storage.load();
+          const dataToRender = latestData.arbitrageData || [];
           UIRenderers.renderArbitrageTable(dataToRender);
           UIRenderers.updateArbitrageLastUpdateDisplay(
-            currentData.lastUpdateTime,
+            latestData.lastUpdateTime,
           );
         }
 
-        // 刷新持仓面板（如果可见）
+        // 刷新持仓面板（如果可见）：用本轮处理后的数据，
+        // 避免读到 doFetch 开头保存的请求前快照
         if (
+          processedData &&
           UIPanels._positionsPanel &&
           UIPanels._positionsPanel.classList.contains("visible")
         ) {
-          UIRenderers.refreshPositionsPanel(currentData);
+          processedData.lastUpdateTime = currentData.lastUpdateTime;
+          UIRenderers.refreshPositionsPanel(processedData);
         }
       } catch (e) {
         console.error("[Ark Stock Monitor] 获取数据失败:", e);
