@@ -18,7 +18,7 @@ html.theme-dark {
   --down: #00a854; /* 跌绿 */
   --flat: #a3a3a3; /* 持平/无数据 */
   --stale: #ff8787; /* 停滞徽章 */
-  --stale-bg: #3d1f1f;
+  --card-stale-bg: #3d1f1f; /* 停滞卡片浅红底 */
   --banner-danger: #c92a2a; /* 错误横条 */
   --chart-bg: #242424; /* 图表容器背景（与 app.js CHART_COLORS 对齐） */
   --backdrop: rgba(0, 0, 0, 0.7);
@@ -38,7 +38,7 @@ html.theme-light {
   --down: #00a854;
   --flat: #777777;
   --stale: #e03131;
-  --stale-bg: #ffe3e3;
+  --card-stale-bg: #ffe3e3;
   --banner-danger: #ffc9c9;
   --chart-bg: #ffffff;
   --backdrop: rgba(17, 17, 17, 0.55);
@@ -120,6 +120,54 @@ button {
   gap: 10px;
 }
 
+/* ---------- 更多按钮下拉菜单 ---------- */
+#more-wrap {
+  position: relative;
+}
+
+/* 菜单激活态：与按压态同位，提示展开中 */
+#btn-more.active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--border);
+}
+
+#more-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 80px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: var(--border-width) solid var(--border);
+  box-shadow: 4px 4px 0 var(--border);
+  z-index: 20;
+}
+
+#more-menu[hidden] {
+  display: none;
+}
+
+.more-menu-item {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  padding: 10px 16px;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* hover 悬浮仅限真实指针设备（同 .btn，移动端 tap 后 :hover 粘滞） */
+@media (hover: hover) {
+  .more-menu-item:hover {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+}
+
 /* ---------- 按钮（brutalist 按压感） ---------- */
 .btn {
   border: var(--border-width) solid var(--border);
@@ -166,7 +214,7 @@ button {
   font-size: 13px;
 }
 
-/* 图标按钮：正方形，图标居中（刷新/主题切换等） */
+/* 图标按钮：正方形，图标居中（刷新、更多等） */
 .btn-icon {
   width: 40px;
   height: 40px;
@@ -175,6 +223,18 @@ button {
   align-items: center;
   justify-content: center;
   font-size: 20px;
+  line-height: 1;
+}
+
+/* 文字图标按钮：正方形，图标居中（刷新、更多等） */
+.btn-icon-text {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
   line-height: 1;
 }
 
@@ -262,7 +322,7 @@ html.theme-light #error-banner {
 
 .card-head {
   display: flex;
-  align-items: baseline;
+  align-items: center; /* 模型名与徽章纵向居中对齐 */
   gap: 8px;
   margin-bottom: 4px;
 }
@@ -372,30 +432,47 @@ html.theme-light #error-banner {
   font-weight: 700;
 }
 
-/* ---------- 徽章（两态常显：正常/停滞） ---------- */
+/* ---------- 徽章 ---------- */
 .badge {
-  display: inline-block;
+  display: inline-flex; /* flex 居中：修复 inline-block 下文字纵向偏上的视觉差 */
+  align-items: center;
+  justify-content: center;
   font-size: 11px;
   font-weight: 800;
-  padding: 2px 8px;
+  line-height: 1;
+  padding: 4px 8px;
   border: 2px solid var(--border);
   letter-spacing: 0.05em;
   flex: none;
 }
 
-.badge-ok {
-  color: var(--down);
-  background: transparent;
+.badge-stale {
+  color: #ffffff;
+  background: var(--stale);
+  border-color: var(--stale);
 }
 
-.badge-stale {
-  color: var(--stale);
-  background: var(--stale-bg);
+/* 停滞卡片：浅红底色 */
+.card-stale {
+  background: var(--card-stale-bg);
 }
 
 .badge-warn {
   color: #111111;
   background: var(--accent);
+}
+
+/* 急涨/急跌徽章：语义色实底 + 白字 */
+.badge-surge {
+  color: #ffffff;
+  background: var(--up);
+  border-color: var(--up);
+}
+
+.badge-drop {
+  color: #ffffff;
+  background: var(--down);
+  border-color: var(--down);
 }
 
 /* ---------- 空态/加载态块 ---------- */
@@ -494,10 +571,10 @@ html.theme-light #error-banner {
     flex: 1;
   }
 
-  /* 头部该行元素改为顶部对齐，两行名字不与价格/按钮错位 */
+  /* 头部该行元素改为居中对齐，两行名字不与价格/按钮错位 */
   #detail-header,
   .detail-title-box {
-    align-items: flex-start;
+    align-items: center;
   }
 }
 
@@ -720,6 +797,155 @@ html.theme-light #error-banner {
   font-weight: 700;
   text-align: center;
   padding: 16px 0;
+}
+
+/* ---------- 设置弹窗（结构/尺寸沿用说明弹窗的 brutalist 面板样式） ---------- */
+#settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#settings-overlay[hidden] {
+  display: none;
+}
+
+#settings-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--backdrop);
+}
+
+#settings-panel {
+  position: relative;
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: var(--border-width) solid var(--border);
+  padding: 18px 20px 16px;
+}
+
+#settings-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+#settings-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-body {
+  border-top: 2px solid var(--border);
+  padding: 16px 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.setting-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.setting-value {
+  color: var(--accent-text);
+  background: var(--accent);
+  border: 2px solid var(--border);
+  padding: 1px 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 滑杆：brutalist 粗边轨道 + 方形拇指（WebKit / Firefox 分别声明） */
+.setting-item input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 24px;
+  margin: 10px 0 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.setting-item input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+}
+
+.setting-item input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -10px; /* 拇指垂直居中于轨道 */
+  background: var(--accent);
+  border: 2px solid var(--border);
+  border-radius: 0;
+}
+
+.setting-item input[type="range"]::-moz-range-track {
+  height: 8px;
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+}
+
+.setting-item input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--accent);
+  border: 2px solid var(--border);
+  border-radius: 0;
+}
+
+.setting-desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 主题切换分段按钮（brutalist 边框，选中项用 accent 填充） */
+#theme-segment {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0 4px;
+}
+
+.theme-option {
+  flex: 1;
+  border: var(--border-width) solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 800;
+  font-size: 14px;
+  padding: 8px 0;
+  cursor: pointer;
+  transition:
+    background 0.06s ease,
+    color 0.06s ease;
+}
+
+/* hover 悬浮仅限真实指针设备（同 .btn，移动端 tap 后 :hover 粘滞） */
+@media (hover: hover) {
+  .theme-option:hover {
+    background: var(--surface-2);
+  }
+}
+
+.theme-option.active {
+  background: var(--accent);
+  color: var(--accent-text);
 }
 
 /* ---------- 响应式 ---------- */

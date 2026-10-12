@@ -17,6 +17,7 @@
   const SPARKLINE_MAX_POINTS = 120;
   const THEME_STORAGE_KEY = "ark_dashboard_theme";
   const FAV_STORAGE_KEY = "ark_dashboard_favorites";
+  const SETTINGS_STORAGE_KEY = "ark_dashboard_settings";
   const DATA_DAYS = 7; // 与服务端保留期一致
 
   // 图表配色（canvas 不读 CSS 变量，JS 字面量表；与 style.css --chart-bg 对齐）
@@ -96,6 +97,17 @@
     return { dir: last > prev ? "up" : "down", pct, delta: last - prev };
   }
 
+  // 急涨/急跌判定：最新价与次新价比较，涨幅超过急涨阈值 / 跌幅超过急跌阈值（阈值来自 Settings）
+  // 返回 "surge" | "drop" | null
+  function surgeStateOf(series) {
+    const trend = latestTrendOf(series);
+    if (!trend || trend.dir === "flat") return null;
+    if (trend.dir === "up" && trend.pct > Settings.get("surge")) return "surge";
+    if (trend.dir === "down" && -trend.pct > Settings.get("drop"))
+      return "drop";
+    return null;
+  }
+
   // 卡片排序：四档 收藏正常 > 收藏停滞 > 未收藏正常 > 未收藏停滞，组内按模型名字典序
   function sortModels(models) {
     // 4 - 收藏+正常, 3 - 收藏+停滞, 2 - 未收藏+正常, 1 - 未收藏+停滞
@@ -144,25 +156,33 @@
         : "dark";
     },
     init() {
-      // 首选已由 index.html 内联脚本写入 <html> class；此处仅同步按钮图标与持久化
-      // （图标必须按实际主题刷新一次，否则刷新页面后按钮停留在 HTML 里写死的默认 ☾）
-      document.getElementById("btn-theme").textContent =
-        this.current() === "light" ? "☀" : "☾";
+      // 首选已由 index.html 内联脚本写入 <html> class；切换入口在设置面板（#theme-segment）。
+      // 此处仅同步分段控件高亮与持久化（否则刷新页面后高亮停留在 HTML 里写死的默认项）
+      this._syncButtons();
       this._syncStorage();
       document
-        .getElementById("btn-theme")
-        .addEventListener("click", () => this.toggle());
+        .getElementById("theme-segment")
+        .addEventListener("click", (e) => {
+          const btn = e.target.closest(".theme-option");
+          if (btn) this.apply(btn.dataset.theme);
+        });
     },
     apply(theme) {
       document.documentElement.className =
         theme === "light" ? "theme-light" : "theme-dark";
       this._syncStorage();
-      document.getElementById("btn-theme").textContent =
-        theme === "light" ? "☀" : "☾";
+      this._syncButtons();
       this._subs.forEach((fn) => fn(theme));
     },
-    toggle() {
-      this.apply(this.current() === "light" ? "dark" : "light");
+    _syncButtons() {
+      const cur = this.current();
+      document
+        .querySelectorAll("#theme-segment .theme-option")
+        .forEach((b) => {
+          const active = b.dataset.theme === cur;
+          b.classList.toggle("active", active);
+          b.setAttribute("aria-pressed", String(active));
+        });
     },
     subscribe(fn) {
       this._subs.push(fn);
@@ -179,16 +199,149 @@
     },
   };
 
+  /* ---------------- MoreMenu（更多按钮下拉菜单：设置 / 说明） ---------------- */
+  const MoreMenu = {
+    _onDocClick: null,
+    _onKey: null,
+
+    init() {
+      document.getElementById("btn-more").addEventListener("click", (e) => {
+        e.stopPropagation(); // 避免冒泡到 document 立刻触发 _onDocClick 关闭
+        this.toggle();
+      });
+      document.getElementById("menu-manual").addEventListener("click", () => {
+        this.close();
+        Manual.open();
+      });
+      document.getElementById("menu-settings").addEventListener("click", () => {
+        this.close();
+        Settings.open();
+      });
+    },
+
+    toggle() {
+      const menu = document.getElementById("more-menu");
+      if (menu.hidden) this.open();
+      else this.close();
+    },
+
+    open() {
+      document.getElementById("more-menu").hidden = false;
+      document.getElementById("btn-more").classList.add("active");
+      this._onDocClick = (e) => {
+        if (!document.getElementById("more-wrap").contains(e.target)) {
+          this.close();
+        }
+      };
+      document.addEventListener("click", this._onDocClick);
+      this._onKey = (e) => {
+        if (e.key === "Escape") this.close();
+      };
+      document.addEventListener("keydown", this._onKey);
+    },
+
+    close() {
+      document.getElementById("more-menu").hidden = true;
+      document.getElementById("btn-more").classList.remove("active");
+      if (this._onDocClick) {
+        document.removeEventListener("click", this._onDocClick);
+        this._onDocClick = null;
+      }
+      if (this._onKey) {
+        document.removeEventListener("keydown", this._onKey);
+        this._onKey = null;
+      }
+    },
+  };
+
+  /* ---------------- Settings（设置弹窗，localStorage 持久化） ---------------- */
+  const Settings = {
+    DEFAULTS: { surge: 5, drop: 5 },
+    _cfg: null,
+    _onKey: null,
+
+    init() {
+      this._cfg = this._load();
+      // 滑杆实时回写百分比文案 + 保存 + 即时刷新徽章
+      const bind = (id, key) => {
+        const slider = document.getElementById(id);
+        const value = document.getElementById(id + "-value");
+        slider.value = String(this._cfg[key]);
+        value.textContent = `${this._cfg[key]}%`;
+        slider.addEventListener("input", () => {
+          this._cfg[key] = Number(slider.value);
+          value.textContent = `${slider.value}%`;
+          this._save();
+          this._refreshBadges();
+        });
+      };
+      bind("setting-surge", "surge");
+      bind("setting-drop", "drop");
+    },
+
+    _clamp(v, fallback) {
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 1 && n <= 20 ? Math.round(n) : fallback;
+    },
+
+    _load() {
+      try {
+        const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+        const obj = raw ? JSON.parse(raw) : {};
+        return {
+          surge: this._clamp(obj.surge, this.DEFAULTS.surge),
+          drop: this._clamp(obj.drop, this.DEFAULTS.drop),
+        };
+      } catch (e) {
+        return { ...this.DEFAULTS };
+      }
+    },
+
+    _save() {
+      try {
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(this._cfg));
+      } catch (e) {
+        /* 隐私模式等场景忽略，本次会话内仍生效 */
+      }
+    },
+
+    get(key) {
+      return this._cfg ? this._cfg[key] : this.DEFAULTS[key];
+    },
+
+    // 阈值变化后重算全部徽章（卡片增量刷新 + 详情）
+    _refreshBadges() {
+      for (const model of State.models) Cards.updateOne(model);
+      if (State.detailId !== null) Detail.updateData();
+    },
+
+    open() {
+      document.getElementById("settings-overlay").hidden = false;
+      document.getElementById("settings-backdrop").onclick = () => this.close();
+      document.getElementById("btn-settings-close").onclick = () =>
+        this.close();
+      this._onKey = (e) => {
+        if (e.key === "Escape") this.close();
+      };
+      document.addEventListener("keydown", this._onKey);
+    },
+
+    close() {
+      if (this._onKey) {
+        document.removeEventListener("keydown", this._onKey);
+        this._onKey = null;
+      }
+      document.getElementById("settings-overlay").hidden = true;
+    },
+  };
+
   /* ---------------- Manual（说明弹窗，内容按 HTML 渲染） ---------------- */
   const Manual = {
     _onKey: null,
     _loaded: false,
 
-    init() {
-      document
-        .getElementById("btn-manual")
-        .addEventListener("click", () => this.open());
-    },
+    // 打开的入口迁移到 MoreMenu 菜单项（menu-manual），不再绑定顶栏按钮
+    init() {},
 
     async open() {
       const body = document.getElementById("manual-body");
@@ -388,10 +541,22 @@
       name.className = "card-name";
       name.textContent = model.name; // textContent 防 XSS
       head.appendChild(name);
-      // 状态徽章（两态常显：正常绿 / 停滞红）
+      // 停滞徽章（默认隐藏，仅停滞时显示；文案/颜色由 updateOne 补）
       const stale = document.createElement("span");
-      stale.className = "badge";
+      stale.className = "badge badge-stale";
+      stale.textContent = "停滞";
+      stale.hidden = true;
       head.appendChild(stale);
+      const surge = document.createElement("span");
+      surge.className = "badge badge-surge";
+      surge.textContent = "急涨";
+      surge.hidden = true;
+      head.appendChild(surge);
+      const drop = document.createElement("span");
+      drop.className = "badge badge-drop";
+      drop.textContent = "急跌";
+      drop.hidden = true;
+      head.appendChild(drop);
 
       // 价格行：价格在左，收藏星标按钮靠右（位于 stale 徽章正下方）
       const priceRow = document.createElement("div");
@@ -450,17 +615,23 @@
       if (!card) return;
 
       card.querySelector(".card-name").textContent = model.name;
-      // 状态徽章两态切换（updateOne 与 buildCard 共用；buildCard 阶段 updateOne 会补文案）
+      // 停滞徽章（仅停滞时展示；停滞卡片同时套浅红背景）
       const stale = card.querySelector(".badge");
-      stale.textContent = model.stale ? "停滞" : "正常";
-      stale.className = model.stale ? "badge badge-stale" : "badge badge-ok";
+      stale.hidden = !model.stale;
+      stale.classList.toggle("badge-stale", !!model.stale);
+      card.classList.toggle("card-stale", !!model.stale);
+
+      const series = State.priceData[model.id];
+      // 急涨/急跌徽章：涨幅/跌幅超过设置阈值时展示（停滞模型不判定）
+      const spike = model.stale ? null : surgeStateOf(series);
+      card.querySelector(".badge-surge").hidden = spike !== "surge";
+      card.querySelector(".badge-drop").hidden = spike !== "drop";
 
       card.querySelector(".card-price").textContent = formatPrice(model.price);
       // 星标两态（跨会话存储在 localStorage，卡片重建后需恢复）
       this.syncFavBtn(card.querySelector(".fav-btn"), Favorites.has(model.id));
 
       const change = card.querySelector(".card-change");
-      const series = State.priceData[model.id];
       const trend = latestTrendOf(series);
       if (!trend) {
         change.textContent = "—";
@@ -524,10 +695,7 @@
       // 填充头部
       document.getElementById("detail-name").textContent = model.name;
       const staleBadge = document.getElementById("detail-stale");
-      staleBadge.textContent = model.stale ? "停滞" : "正常";
-      staleBadge.className = model.stale
-        ? "badge badge-stale"
-        : "badge badge-ok";
+      staleBadge.hidden = !model.stale;
       document.getElementById("detail-price").textContent = formatPrice(
         model.price,
       );
@@ -946,6 +1114,8 @@
   async function init() {
     Theme.init();
     Favorites.init();
+    Settings.init();
+    MoreMenu.init();
     Manual.init();
     document
       .getElementById("btn-refresh")
