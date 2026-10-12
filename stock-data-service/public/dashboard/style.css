@@ -287,6 +287,111 @@ html.theme-light #error-banner {
   flex: 1;
 }
 
+/* 筛选按钮激活态：与 #btn-more.active 同款按压位，提示筛选面板展开中 */
+#btn-filter.active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--border);
+}
+
+/* ---------- 筛选条件面板 ---------- */
+/* 外层包裹：限宽与 #grid 对齐（同 #error-banner-wrap） */
+#filter-bar-wrap {
+  max-width: 1560px;
+  margin: 0 auto;
+}
+
+#filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 20px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: var(--border-width) solid var(--border);
+}
+
+/* 两行：第一行模型名输入，第二行标签选择 */
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.filter-label {
+  font-size: 14px;
+  font-weight: 800;
+  flex: none;
+}
+
+#filter-name {
+  flex: 1;
+  min-width: 160px;
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--bg);
+  border: var(--border-width) solid var(--border);
+  outline: none;
+}
+
+#filter-name::placeholder {
+  color: var(--text-muted);
+}
+
+#filter-name:focus {
+  background: var(--surface-2);
+}
+
+#filter-tags {
+  display: flex;
+  gap: 8px;
+}
+
+/* 标签 chip：按压式边框与全站一致；选中高亮按语义配色 */
+.filter-tag {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 6px 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border);
+  cursor: pointer;
+  transition:
+    transform 0.06s ease,
+    box-shadow 0.06s ease;
+}
+
+@media (hover: hover) {
+  .filter-tag:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--border);
+  }
+}
+
+.filter-tag:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--border);
+}
+
+.filter-tag.active[data-tag="notStale"] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.filter-tag.active[data-tag="surge"] {
+  background: var(--up);
+  color: #ffffff;
+}
+
+.filter-tag.active[data-tag="drop"] {
+  background: var(--down);
+  color: #ffffff;
+}
+
 /* ---------- 卡片网格 ---------- */
 #grid {
   display: grid;

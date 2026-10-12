@@ -18,6 +18,7 @@
   const THEME_STORAGE_KEY = "ark_dashboard_theme";
   const FAV_STORAGE_KEY = "ark_dashboard_favorites";
   const SETTINGS_STORAGE_KEY = "ark_dashboard_settings";
+  const FILTER_STORAGE_KEY = "ark_dashboard_filter";
   const DATA_DAYS = 7; // 与服务端保留期一致
 
   // 图表配色（canvas 不读 CSS 变量，JS 字面量表；与 style.css --chart-bg 对齐）
@@ -313,9 +314,10 @@
       return this._cfg ? this._cfg[key] : this.DEFAULTS[key];
     },
 
-    // 阈值变化后重算全部徽章（卡片增量刷新 + 详情）
+    // 阈值变化后重算全部徽章（卡片增量刷新 + 详情）；急涨/急跌判定随之变化，筛选同步重算
     _refreshBadges() {
       for (const model of State.models) Cards.updateOne(model);
+      Filter.applyAll();
       if (State.detailId !== null) Detail.updateData();
     },
 
@@ -336,6 +338,137 @@
         this._onKey = null;
       }
       document.getElementById("settings-overlay").hidden = true;
+    },
+  };
+
+  /* ---------------- Filter（筛选面板，localStorage 持久化） ---------------- */
+  // 名称：子串包含、忽略大小写（空则不过滤）；
+  // 标签多选：notStale 与 surge/drop 之间为「且」，surge 与 drop 之间为「或」，全不选则不过滤。
+  // 只切换卡片的 hidden，不重建不移动，过滤后顺序与全局排序一致。
+  const Filter = {
+    DEFAULTS: { name: "", tags: ["notStale"] },
+    VALID_TAGS: ["notStale", "surge", "drop"],
+    _cfg: null,
+    _open: false, // 面板展开态不持久化，仅筛选条件入库
+
+    init() {
+      this._cfg = this._load();
+
+      const btn = document.getElementById("btn-filter");
+      const bar = document.getElementById("filter-bar");
+      btn.addEventListener("click", () => {
+        this._open = !this._open;
+        bar.hidden = !this._open;
+        btn.classList.toggle("active", this._open);
+        btn.setAttribute("aria-pressed", String(this._open));
+      });
+
+      const input = document.getElementById("filter-name");
+      input.value = this._cfg.name;
+      input.addEventListener("input", () => {
+        this._cfg.name = input.value;
+        this._save();
+        this.applyAll();
+      });
+
+      // 清空按钮：清空输入并立即重新过滤
+      document
+        .getElementById("btn-filter-clear")
+        .addEventListener("click", () => {
+          input.value = "";
+          this._cfg.name = "";
+          this._save();
+          this.applyAll();
+        });
+
+      document.getElementById("filter-tags").addEventListener("click", (e) => {
+        const tagBtn = e.target.closest(".filter-tag");
+        if (!tagBtn) return;
+        const tag = tagBtn.dataset.tag;
+        const idx = this._cfg.tags.indexOf(tag);
+        if (idx >= 0) this._cfg.tags.splice(idx, 1);
+        else this._cfg.tags.push(tag);
+        this._syncTagBtn(tagBtn);
+        this._save();
+        this.applyAll();
+      });
+
+      // 回显已保存的标签选中态
+      document
+        .querySelectorAll("#filter-tags .filter-tag")
+        .forEach((b) => this._syncTagBtn(b));
+    },
+
+    _load() {
+      try {
+        const raw = localStorage.getItem(FILTER_STORAGE_KEY);
+        const obj = raw ? JSON.parse(raw) : {};
+        return {
+          name: typeof obj.name === "string" ? obj.name : this.DEFAULTS.name,
+          tags: Array.isArray(obj.tags)
+            ? obj.tags.filter((t) => this.VALID_TAGS.includes(t))
+            : [...this.DEFAULTS.tags],
+        };
+      } catch (e) {
+        return { name: this.DEFAULTS.name, tags: [...this.DEFAULTS.tags] };
+      }
+    },
+
+    _save() {
+      try {
+        localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(this._cfg));
+      } catch (e) {
+        /* 隐私模式等场景忽略，本次会话内仍生效 */
+      }
+    },
+
+    _syncTagBtn(btn) {
+      const active = this._cfg.tags.includes(btn.dataset.tag);
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", String(active));
+    },
+
+    // 判定单个模型是否通过筛选
+    matches(model) {
+      const name = String(this._cfg.name || "").trim();
+      if (name && !model.name.toLowerCase().includes(name.toLowerCase()))
+        return false;
+
+      const tags = this._cfg.tags;
+      if (!tags.length) return true;
+      // 未停滞：选中则过滤掉停滞模型
+      if (tags.includes("notStale") && model.stale) return false;
+      // 急涨/急跌：两者选一即「或」；停滞模型不判定（spike=null），不会匹配
+      const wantSpike = tags.includes("surge")
+        ? tags.includes("drop")
+          ? ["surge", "drop"]
+          : ["surge"]
+        : tags.includes("drop")
+          ? ["drop"]
+          : null;
+      if (wantSpike) {
+        const spike = model.stale
+          ? null
+          : surgeStateOf(State.priceData[model.id]);
+        if (!wantSpike.includes(spike)) return false;
+      }
+      return true;
+    },
+
+    // 对单张卡片应用显隐（增量更新路径）
+    applyCard(model, card) {
+      card.hidden = !this.matches(model);
+    },
+
+    // 对全量卡片应用显隐（筛选条件变化 / 首次建卡 / 阈值变化）
+    applyAll() {
+      if (!this._cfg) return; // init 前被调用（理论上不会发生）防御
+      for (const model of State.models) {
+        const card = grid.querySelector(
+          `.card[data-stock-id="${model.id}"]`,
+        );
+        if (card) this.applyCard(model, card);
+      }
     },
   };
 
@@ -582,6 +715,7 @@
       for (const model of State.models) {
         grid.appendChild(this.buildCard(model));
       }
+      Filter.applyAll(); // 建卡后立即应用已保存的筛选条件
     },
     buildCard(model) {
       const card = document.createElement("article");
@@ -701,6 +835,9 @@
       Sparkline.render(card.querySelector(".card-spark"), series, {
         stale: model.stale,
       });
+
+      // 本卡片的停滞/急涨/急跌状态可能已变化，重算筛选显隐
+      Filter.applyCard(model, card);
     },
   };
 
@@ -1173,6 +1310,7 @@
     Theme.init();
     Favorites.init();
     Settings.init();
+    Filter.init();
     MoreMenu.init();
     Manual.init();
     Changelog.init();

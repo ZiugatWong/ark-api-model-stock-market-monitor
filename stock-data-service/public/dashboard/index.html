@@ -54,6 +54,16 @@
         >
           <span class="btn-refresh-spin">刷</span>
         </button>
+        <!-- 筛选按钮：切换错误栏与卡片网格之间的筛选条件面板显隐 -->
+        <button
+          id="btn-filter"
+          class="btn btn-icon-text"
+          type="button"
+          aria-label="筛选"
+          title="筛选"
+        >
+          筛
+        </button>
         <!-- 更多按钮：向下弹出菜单（设置 / 说明 / 更新日志） -->
         <div id="more-wrap">
           <button
@@ -85,6 +95,59 @@
       <div id="error-banner" hidden>
         <span id="error-text"></span>
         <button id="btn-retry" class="btn btn-sm" type="button">重试</button>
+      </div>
+    </div>
+
+    <!-- 筛选条件面板：模型名模糊过滤（忽略大小写）+ 标签多选，由「筛」按钮切换显隐 -->
+    <div id="filter-bar-wrap">
+      <div id="filter-bar" hidden>
+        <div class="filter-row">
+          <label class="filter-label" for="filter-name">模型名：</label>
+          <input
+            id="filter-name"
+            type="search"
+            placeholder="按输入的模型名过滤"
+            aria-label="按输入的模型名过滤"
+            autocomplete="off"
+          />
+          <button
+            id="btn-filter-clear"
+            class="btn btn-sm"
+            type="button"
+            aria-label="清空模型名"
+          >
+            清空
+          </button>
+        </div>
+        <div class="filter-row">
+          <span class="filter-label">选择标签：</span>
+          <div id="filter-tags">
+            <button
+              class="filter-tag"
+              data-tag="notStale"
+              type="button"
+              aria-pressed="false"
+            >
+              未停滞
+            </button>
+            <button
+              class="filter-tag"
+              data-tag="surge"
+              type="button"
+              aria-pressed="false"
+            >
+              急涨
+            </button>
+            <button
+              class="filter-tag"
+              data-tag="drop"
+              type="button"
+              aria-pressed="false"
+            >
+              急跌
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
