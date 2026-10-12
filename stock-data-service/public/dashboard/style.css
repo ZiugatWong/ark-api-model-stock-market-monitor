@@ -238,6 +238,25 @@ button {
   line-height: 1;
 }
 
+/* 刷新按钮旋转动画：仅加载期间给按钮加 .refreshing，转动内层 span。
+   动画作用在 span 上（而非按钮本身），避免与 .btn:active 的按压 transform 冲突 */
+.btn-refresh-spin {
+  display: inline-block;
+}
+
+#btn-refresh.refreshing .btn-refresh-spin {
+  animation: btn-spin 1.2s ease-in-out 1;
+}
+
+@keyframes btn-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ---------- 错误横条 ---------- */
 /* 外层包裹：限宽与 #grid 对齐，横条在其中居中 */
 #error-banner-wrap {

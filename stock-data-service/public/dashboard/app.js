@@ -1084,8 +1084,13 @@
   async function run({ isAuto } = {}) {
     if (State.loading) return;
     State.loading = true;
-    // 加载中提示：更新时间位置改为文案（不在按钮上做，按钮保留按压动画）
+    // 加载中提示：更新时间位置改为文案；按钮仅做一圈旋转动画（纯视觉，不联动其他控件）。
+    // 移除→强制回流→重加类，否则快速连续刷新时类已存在、动画不会重播
     document.getElementById("last-updated").textContent = "数据加载中...";
+    const refreshBtn = document.getElementById("btn-refresh");
+    refreshBtn.classList.remove("refreshing");
+    void refreshBtn.offsetWidth;
+    refreshBtn.classList.add("refreshing");
 
     try {
       // 串行：先拿模型列表（缓存命中，快），再按最新 id 列表拉价格
