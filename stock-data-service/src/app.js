@@ -47,7 +47,7 @@ app.use(
   }),
 );
 
-// 应用限流中间件（/api/models、/api/prices/batch、/api/manual 与 /health 由 skip 跳过，不限流）
+// 应用限流中间件（/api/models、/api/prices/batch、/api/manual、/api/changelog 与 /health 由 skip 跳过，不限流）
 app.use(rateLimiter);
 
 // 挂载路由

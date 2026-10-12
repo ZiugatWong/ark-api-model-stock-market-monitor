@@ -15,6 +15,9 @@ COPY public/ ./public/
 # 复制 dashboard 说明文档
 COPY manual.md ./manual.md
 
+# 复制 dashboard 更新日志
+COPY changelog.md ./changelog.md
+
 # 暴露端口
 EXPOSE 3210
 

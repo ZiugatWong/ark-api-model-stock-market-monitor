@@ -199,7 +199,7 @@
     },
   };
 
-  /* ---------------- MoreMenu（更多按钮下拉菜单：设置 / 说明） ---------------- */
+  /* ---------------- MoreMenu（更多按钮下拉菜单：设置 / 说明 / 更新日志） ---------------- */
   const MoreMenu = {
     _onDocClick: null,
     _onKey: null,
@@ -212,6 +212,10 @@
       document.getElementById("menu-manual").addEventListener("click", () => {
         this.close();
         Manual.open();
+      });
+      document.getElementById("menu-changelog").addEventListener("click", () => {
+        this.close();
+        Changelog.open();
       });
       document.getElementById("menu-settings").addEventListener("click", () => {
         this.close();
@@ -380,6 +384,51 @@
     },
   };
 
+  /* ---------------- Changelog（更新日志弹窗，内容按 HTML 渲染） ---------------- */
+  const Changelog = {
+    _onKey: null,
+    _loaded: false,
+
+    // 打开的入口在 MoreMenu 菜单项（menu-changelog），与说明弹窗一致
+    init() {},
+
+    async open() {
+      const body = document.getElementById("changelog-body");
+      const overlay = document.getElementById("changelog-overlay");
+      overlay.hidden = false;
+
+      // 内容按 HTML 渲染：来源是服务端读取的 changelog.md，非不可信输入
+      if (!this._loaded) {
+        body.innerHTML = '<p class="manual-empty">加载中...</p>';
+        try {
+          const data = await fetchChangelog();
+          const content = data && data.content ? data.content : "";
+          body.innerHTML =
+            content.trim() || '<p class="manual-empty">暂无更新日志</p>';
+          this._loaded = true; // 会话内缓存：成功一次后不再重复请求
+        } catch (e) {
+          body.innerHTML = '<p class="manual-empty">更新日志加载失败</p>';
+        }
+      }
+
+      // 遮罩交互（onclick 幂等赋值，重复开关不会累积监听器）
+      document.getElementById("changelog-backdrop").onclick = () => this.close();
+      document.getElementById("btn-changelog-close").onclick = () => this.close();
+      this._onKey = (e) => {
+        if (e.key === "Escape") this.close();
+      };
+      document.addEventListener("keydown", this._onKey);
+    },
+
+    close() {
+      if (this._onKey) {
+        document.removeEventListener("keydown", this._onKey);
+        this._onKey = null;
+      }
+      document.getElementById("changelog-overlay").hidden = true;
+    },
+  };
+
   /* ---------------- Api ---------------- */
   const FETCH_TIMEOUT_MS = 30 * 1000;
 
@@ -425,6 +474,10 @@
 
   function fetchManual() {
     return _fetchJson("/api/manual");
+  }
+
+  function fetchChangelog() {
+    return _fetchJson("/api/changelog");
   }
 
   /* ---------------- Sparkline（内联 SVG，无交互） ---------------- */
@@ -1117,6 +1170,7 @@
     Settings.init();
     MoreMenu.init();
     Manual.init();
+    Changelog.init();
     document
       .getElementById("btn-refresh")
       .addEventListener("click", () => run());

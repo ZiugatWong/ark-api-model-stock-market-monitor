@@ -135,7 +135,7 @@ button {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  min-width: 80px;
+  min-width: 100px;
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -711,8 +711,9 @@ html.theme-light #error-banner {
   font-weight: 800;
 }
 
-/* ---------- 说明弹窗 ---------- */
-#manual-overlay {
+/* ---------- 说明 / 更新日志弹窗 ---------- */
+#manual-overlay,
+#changelog-overlay {
   position: fixed;
   inset: 0;
   z-index: 100;
@@ -721,17 +722,20 @@ html.theme-light #error-banner {
   justify-content: center;
 }
 
-#manual-overlay[hidden] {
+#manual-overlay[hidden],
+#changelog-overlay[hidden] {
   display: none;
 }
 
-#manual-backdrop {
+#manual-backdrop,
+#changelog-backdrop {
   position: absolute;
   inset: 0;
   background: var(--backdrop);
 }
 
-#manual-panel {
+#manual-panel,
+#changelog-panel {
   position: relative;
   width: min(560px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);
@@ -741,14 +745,16 @@ html.theme-light #error-banner {
   padding: 18px 20px 16px;
 }
 
-#manual-header {
+#manual-header,
+#changelog-header {
   display: flex;
   align-items: center;
   gap: 14px;
   margin-bottom: 12px;
 }
 
-#manual-title {
+#manual-title,
+#changelog-title {
   margin: 0;
   font-size: 22px;
   font-weight: 800;

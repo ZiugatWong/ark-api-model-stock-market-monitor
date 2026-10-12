@@ -4,6 +4,7 @@ const modelsService = require('../services/modelsService');
 const syncScheduler = require('../services/syncScheduler');
 const arkGameApi = require('../services/arkGameApi');
 const manualService = require('../services/manualService');
+const changelogService = require('../services/changelogService');
 const { sendSuccess, sendError, asyncHandler } = require('../utils/responseHelper');
 const { DATA_RETENTION_DAYS } = require('../constants/business');
 const logger = require('../utils/logger');
@@ -26,6 +27,15 @@ router.get('/models', asyncHandler('/api/models', async (req, res) => {
  */
 router.get('/manual', asyncHandler('/api/manual', async (req, res) => {
   const html = await manualService.getManualHtml();
+  sendSuccess(res, { content: html });
+}));
+
+/**
+ * GET /api/changelog
+ * dashboard 更新日志（不限流，内容来自仓库根目录 changelog.md，Markdown 转 HTML）
+ */
+router.get('/changelog', asyncHandler('/api/changelog', async (req, res) => {
+  const html = await changelogService.getChangelogHtml();
   sendSuccess(res, { content: html });
 }));
 
