@@ -2744,6 +2744,19 @@
       margin: 6px 0;
       line-height: 1.6;
     }
+    .ark-continuous-detail {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--ark-label);
+      margin: 6px 0 2px;
+    }
+    .ark-continuous-detail > div {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
     .ark-trade-status {
       min-height: 18px;
       font-size: 12px;
@@ -5358,7 +5371,7 @@
         <div class="panel-body">
           <div class="ark-section">
             <div class="ark-trade-info" id="ark-trade-info"></div>
-            <div class="ark-trigger-row">
+            <div class="ark-trigger-row" id="ark-trade-shares-row">
               <span style="color:var(--ark-label);font-size:12px;">股数：</span>
               <input type="number" class="ark-minute-input" id="ark-trade-shares" min="1" step="1" style="width:120px;" />
             </div>
@@ -5375,6 +5388,47 @@
               <button class="ark-gray-btn" data-ratio="all">全部</button>
               <button class="ark-gray-btn" data-ratio="half">1/2</button>
             </div>
+            <div class="ark-trigger-row" id="ark-continuous-row" style="margin-top:10px;">
+              <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--ark-label);cursor:pointer;">
+                <input type="checkbox" id="ark-continuous-check" />
+                <span id="ark-continuous-check-label">连续买入</span>
+              </label>
+            </div>
+            <div class="ark-continuous-detail" id="ark-continuous-detail" hidden>
+              <div>
+                <span>并发上限</span>
+                <select class="ark-minute-input" id="ark-continuous-concurrency" style="width:56px;">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5" selected>5</option>
+                </select>
+                <span>个 worker</span>
+              </div>
+              <div>
+                <span>单 worker 内任务间隔</span>
+                <select class="ark-minute-input" id="ark-continuous-interval" style="width:64px;">
+                  <option value="0.5">0.5</option>
+                  <option value="1" selected>1</option>
+                  <option value="1.5">1.5</option>
+                  <option value="2">2</option>
+                  <option value="2.5">2.5</option>
+                  <option value="3">3</option>
+                  <option value="3.5">3.5</option>
+                  <option value="4">4</option>
+                  <option value="4.5">4.5</option>
+                  <option value="5">5</option>
+                </select>
+                <span>秒</span>
+              </div>
+              <div>
+                <span id="ark-continuous-total-label">合计买入</span>
+                <span id="ark-continuous-total" style="font-weight:600;color:inherit;">-</span>
+                <span>次</span>
+              </div>
+              <div class="ark-continuous-plan-hint" id="ark-continuous-plan-hint"></div>
+            </div>
             <div class="ark-trade-lock" id="ark-trade-lock" hidden></div>
             <div class="ark-trade-status" id="ark-trade-status"></div>
             <div class="ark-trade-actions">
@@ -5388,12 +5442,55 @@
       document.body.appendChild(panel);
       Interactions.initDrag(panel, panel.querySelector(".ark-panel-header"));
 
-      // 关闭 / 取消：仅隐藏面板
+      // 关闭 / 取消：正常状态仅隐藏面板；连续操作进行中时取消按钮为「中止连续」，点击中断
       const closePanel = () => panel.classList.remove("visible");
-      panel.querySelector(".close-btn").addEventListener("click", closePanel);
+      panel.querySelector(".close-btn").addEventListener("click", () => {
+        if (this._continuousAbort) this._continuousAbort.aborted = true;
+        closePanel();
+      });
+      panel.querySelector("#ark-trade-cancel").addEventListener("click", () => {
+        if (this._continuousAbort) {
+          this._continuousAbort.aborted = true;
+          return; // 中止连续操作，不关闭面板
+        }
+        closePanel();
+      });
+
+      // 一键梭哈/清仓勾选框：勾选后隐藏股数输入行/市值提示/两组快捷按钮，展示计划详情并自动计算分笔
+      const syncContinuousView = () => {
+        const check = panel.querySelector("#ark-continuous-check");
+        const detail = panel.querySelector("#ark-continuous-detail");
+        const on = check.checked;
+        detail.hidden = !on;
+        ["#ark-trade-shares-row", "#ark-trade-value-hint"].forEach((sel) => {
+          panel.querySelector(sel).style.display = on ? "none" : "";
+        });
+        [
+          "#ark-trade-quick-label",
+          "#ark-trade-cap-label",
+        ].forEach((sel) => {
+          panel.querySelector(sel).style.display = on ? "none" : "";
+        });
+        ["#ark-trade-quick-row", "#ark-trade-cap-row"].forEach((sel) => {
+          panel.querySelector(sel).style.display = on ? "none" : "";
+        });
+        if (on) {
+          this._updateContinuousPlan();
+        } else {
+          this._continuousPlan = null;
+        }
+      };
       panel
-        .querySelector("#ark-trade-cancel")
-        .addEventListener("click", closePanel);
+        .querySelector("#ark-continuous-check")
+        .addEventListener("change", syncContinuousView);
+      this._syncContinuousView = syncContinuousView;
+
+      // 并发上限手动修改标记：勾选后先自动填入计算值，用户一旦手改则不再覆盖、执行以手动值为准
+      panel
+        .querySelector("#ark-continuous-concurrency")
+        .addEventListener("change", (e) => {
+          e.target.dataset.touched = "1";
+        });
 
       // 快捷按钮：按比例计算股数并填入输入框
       panel.querySelectorAll("#ark-trade-quick-row button").forEach((btn) => {
@@ -5424,6 +5521,7 @@
           this._updateTradeValueHint();
         });
       });
+      // 实时更新市值提示
       panel.querySelector("#ark-trade-shares").addEventListener("input", () => {
         this._updateTradeValueHint();
       });
@@ -5439,6 +5537,23 @@
           const input = panel.querySelector("#ark-trade-shares");
           const statusEl = panel.querySelector("#ark-trade-status");
           const confirmBtn = panel.querySelector("#ark-trade-confirm");
+
+          // 一键梭哈/清仓：勾选时按自动分笔计划执行（股数输入框隐藏，无需股数校验）
+          if (panel.querySelector("#ark-continuous-check")?.checked) {
+            this._updateContinuousPlan(); // 按当前快照重算，防止勾选后数据陈旧
+            const plan = this._continuousPlan;
+            if (!plan) {
+              statusEl.textContent = "✗ 无法计算分笔计划，请刷新后重试";
+              statusEl.className = "ark-trade-status err";
+              return;
+            }
+            const intervalSec = Number(
+              panel.querySelector("#ark-continuous-interval").value,
+            );
+            this._runContinuousTrades({ state, plan, intervalSec, panel });
+            return;
+          }
+
           const shares = Number(input.value);
 
           // 前端校验（服务端仍为最终防线）
@@ -5454,6 +5569,18 @@
                 : "✗ 超出持仓股数";
             statusEl.className = "ark-trade-status err";
             return;
+          }
+          // 交易金额（含手续费）超出接口上限：拦截提交
+          if (state.price > 0) {
+            const pct =
+              state.action === "buy" ? state.buyFeePct : state.sellFeePct;
+            const factor =
+              state.action === "buy" ? 1 + pct / 100 : 1 - pct / 100;
+            if (shares * state.price * factor > CONFIG.TRADE_API_MAX_AMOUNT) {
+              statusEl.textContent = `✗ 超出接口金额上限（${Utils.formatThousands(CONFIG.TRADE_API_MAX_AMOUNT)} 代币）`;
+              statusEl.className = "ark-trade-status err";
+              return;
+            }
           }
 
           this._tradeBusy = true;
@@ -5534,6 +5661,13 @@
       const amount = shares * state.price * factor;
       const formatted = Utils.formatThousands(Math.round(amount * 100) / 100);
 
+      // 交易金额（含手续费）超出接口上限：优先提示
+      if (amount > CONFIG.TRADE_API_MAX_AMOUNT) {
+        hintEl.textContent = `✗ 超出接口金额上限（${Utils.formatThousands(CONFIG.TRADE_API_MAX_AMOUNT)} 代币）`;
+        hintEl.classList.add("err");
+        return;
+      }
+
       if (isBuy) {
         if (state.balance == null || amount > state.balance) {
           // 买入：需支付金额（含手续费）超出可用代币
@@ -5554,6 +5688,195 @@
         hintEl.textContent = `收入为：${formatted} 代币`;
         hintEl.classList.add("ok");
       }
+    },
+
+    // 一键梭哈/清仓：将全部代币（买入）/全部持仓股数（卖出）按单笔交易金额上限自动分笔
+    // 结果落 this._continuousPlan = { total, concurrency, sharesList }，无有效计划时为 null；
+    // 合计次数 = 满额笔数（商），梭哈时余数金额能再买 ≥1 股则 +1 笔、该股数由剩余金额直接换算（无尾差）
+    _updateContinuousPlan() {
+      const panel = this._tradePanel;
+      const state = this._tradeState;
+      if (!panel || !state) return;
+      const isBuy = state.action === "buy";
+      const totalEl = panel.querySelector("#ark-continuous-total");
+      const hintEl = panel.querySelector("#ark-continuous-plan-hint");
+      const concurrencySel = panel.querySelector("#ark-continuous-concurrency");
+      this._continuousPlan = null;
+      if (totalEl) totalEl.textContent = "-";
+      const fail = (msg) => {
+        if (hintEl) hintEl.textContent = msg;
+        if (concurrencySel && !concurrencySel.dataset.touched)
+          concurrencySel.value = "1";
+      };
+      const fmtAmt = (v) =>
+        Utils.formatThousands(Math.round(v * 100) / 100);
+
+      if (!hintEl) return;
+      hintEl.textContent = "";
+      if (state.price == null || state.price <= 0) {
+        fail("✗ 现价数据不足，无法计算，请刷新");
+        return;
+      }
+      const feePct = isBuy ? state.buyFeePct : state.sellFeePct;
+      // 每股交易金额（买入含买手续费，卖出含卖手续费，与金额上限校验同口径）
+      const unit =
+        isBuy
+          ? state.price * (1 + feePct / 100)
+          : state.price * (1 - feePct / 100);
+      if (!(unit > 0)) {
+        fail("✗ 现价数据不足，无法计算，请刷新");
+        return;
+      }
+      // 单笔满额（金额贴近接口上限）对应的整数股数
+      const fullShares = Math.floor(CONFIG.TRADE_API_MAX_AMOUNT / unit);
+      if (fullShares < 1) {
+        fail("✗ 现价过高，单笔不足 1 股金额上限");
+        return;
+      }
+      const fullAmt = fullShares * unit;
+      let total;
+      let sharesList;
+      let lastAmt;
+      if (isBuy) {
+        // 梭哈：按「全部代币 - 前 n 次满额总额」的剩余金额计算最后一笔（不产生尾差）
+        if (state.balance == null) {
+          fail("✗ 余额数据不足，请先刷新");
+          return;
+        }
+        if (state.balance < fullAmt) {
+          // 余额不足一笔满额：整笔投入
+          const sh = Math.floor(state.balance / unit);
+          if (sh < 1) {
+            fail("✗ 可用代币不足买入 1 股");
+            return;
+          }
+          total = 1;
+          sharesList = [sh];
+          lastAmt = sh * unit;
+        } else {
+          const n = Math.floor(state.balance / fullAmt); // 商（满额笔数）
+          const remainder = state.balance - n * fullAmt; // 剩余金额
+          const lastShares = Math.floor(remainder / unit);
+          if (lastShares >= 1) {
+            // 商 +1：余数能再买至少 1 股时补最后一笔
+            total = n + 1;
+            sharesList = new Array(n).fill(fullShares);
+            sharesList.push(lastShares);
+            lastAmt = lastShares * unit;
+          } else {
+            // 余数不足 1 股：合计次数恰为商，全为满额笔
+            total = n;
+            sharesList = new Array(n).fill(fullShares);
+            lastAmt = fullAmt;
+          }
+        }
+      } else {
+        // 清仓：按持仓整数股数切分，尾差并入最后一笔
+        const totalShares = state.pos?.shares || 0;
+        if (totalShares < 1) {
+          fail("✗ 暂无持仓可卖出");
+          return;
+        }
+        total = Math.ceil(totalShares / fullShares);
+        const lastShares = totalShares - (total - 1) * fullShares;
+        sharesList = new Array(total).fill(fullShares);
+        sharesList[total - 1] = lastShares;
+        lastAmt = lastShares * unit;
+      }
+      // 手动改过下拉框以手改值为优先，故自动建议值只在未触碰时回写
+      let planConcurrency = Math.min(5, total);
+      if (concurrencySel) {
+        if (!concurrencySel.dataset.touched) {
+          concurrencySel.value = String(planConcurrency);
+          planConcurrency = Math.min(5, total);
+        } else {
+          // 以手动修改为准，但不超出合计次数
+          planConcurrency = Math.min(5, total, Number(concurrencySel.value));
+        }
+      }
+      this._continuousPlan = { total, concurrency: planConcurrency, sharesList };
+      if (totalEl) totalEl.textContent = String(total);
+      hintEl.textContent =
+        total > 1
+          ? `前 ${total - 1} 次交易金额为 ${fmtAmt(fullAmt)}，最后 1 次交易金额为 ${fmtAmt(lastAmt)}`
+          : `1 次交易金额为 ${fmtAmt(lastAmt)}`;
+    },
+
+    // 一键梭哈/清仓执行：按分笔计划（plan.sharesList 第 i 笔的股数）在并发上限内并发提交，
+    // 可中止，结束时提示成功/失败条数
+    async _runContinuousTrades({ state, plan, intervalSec, panel }) {
+      const statusEl = panel.querySelector("#ark-trade-status");
+      const confirmBtn = panel.querySelector("#ark-trade-confirm");
+      const cancelBtn = panel.querySelector("#ark-trade-cancel");
+      const total = plan.total;
+      const concurrency = Math.min(plan.concurrency, total);
+      this._tradeBusy = true;
+      this._continuousAbort = { aborted: false };
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "执行中...";
+      cancelBtn.textContent = "中止连续";
+
+      let index = 0;
+      let done = 0;
+      let success = 0;
+      let failed = 0;
+      // worker 池流水线调度（非分批）：workers 共享 index，每笔完成立即取下一笔，
+      // 在途请求数恒 ≤ 并发上限；单笔耗时只拖慢其所属 worker，不影响其余 worker 推进；
+      // 每 worker 内部，完成任务后按设定间隔（随机 ±20%）休眠再取下一任务
+      const worker = async () => {
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        while (index < total && !this._continuousAbort.aborted) {
+          index++;
+          // 按计划取本笔股数（前 N-1 笔为满额，最后一笔为尾差）
+          const taskShares = plan.sharesList[index - 1];
+          try {
+            const body = await API.submitTrade({
+              action: state.action,
+              stockId: state.stockId,
+              shares: taskShares,
+            });
+            // 交易成功：落库一条本地交易记录（接口不提供交易历史，仅供本脚本展示）
+            DataProcessor.recordTrade({
+              id: body?.tradeId,
+              side: state.action,
+              stockId: state.stockId,
+              shares: taskShares,
+              price: state.price,
+              feePct:
+                state.action === "buy" ? state.buyFeePct : state.sellFeePct,
+            });
+            success++;
+          } catch (err) {
+            console.error("[Ark Stock Monitor] 连续交易单笔失败:", err);
+            failed++;
+          }
+          done++;
+          statusEl.textContent = `执行中 ${done}/${total}（成功 ${success}，失败 ${failed}）`;
+          statusEl.className = "ark-trade-status";
+          // 任务间隔：设定值随机 ±20% 后生效，等待到点再取下一任务
+          if (index < total && !this._continuousAbort.aborted) {
+            const jittered = intervalSec * (1 + (Math.random() * 0.4 - 0.2));
+            await sleep(jittered * 1000);
+          }
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(concurrency, total) }, () => worker()),
+      );
+
+      const aborted = this._continuousAbort.aborted;
+      this._continuousAbort = null;
+      this._tradeBusy = false;
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = state.action === "buy" ? "确定买入" : "确定卖出";
+      cancelBtn.textContent = "取消";
+      const resultText = `✓ 一键${state.action === "buy" ? "梭哈" : "清仓"}结束：成功 ${success} 条，失败 ${failed} 条`;
+      statusEl.textContent = aborted ? `已中止。${resultText.slice(1)}` : resultText;
+      statusEl.className = "ark-trade-status";
+      statusEl.classList.add(!aborted && failed === 0 ? "ok" : "err");
+
+      // 连续操作结束后实时拉取最新数据刷新面板（成功/失败统计在刷新后回显）
+      this._refreshTradePanelData(statusEl.textContent);
     },
 
     // 实时拉取行情+余额并重渲染交易面板（纯展示，不写 Storage）
@@ -5727,10 +6050,7 @@
       }
       const capLabel = panel.querySelector("#ark-trade-cap-label");
       if (capLabel) {
-        capLabel.textContent =
-          action === "buy"
-            ? `买入接口金额上限（${Utils.formatThousands(CONFIG.TRADE_API_MAX_AMOUNT)}）的：`
-            : `卖出接口金额上限（${Utils.formatThousands(CONFIG.TRADE_API_MAX_AMOUNT)}）的：`;
+        capLabel.textContent = `单笔交易金额上限（${Utils.formatThousands(CONFIG.TRADE_API_MAX_AMOUNT)}）的：`;
       }
       if (action === "buy") {
         infoRow("可用代币", balanceText);
@@ -5777,6 +6097,33 @@
       confirmBtn.disabled = false;
       confirmBtn.textContent = action === "buy" ? "确定买入" : "确定卖出";
       this._tradeBusy = false;
+
+      // 一键梭哈/清仓区块：复位勾选状态、显隐与计划展示，并按方向设置文案
+      const checkLabel = panel.querySelector("#ark-continuous-check-label");
+      const totalLabel = panel.querySelector("#ark-continuous-total-label");
+      const check = panel.querySelector("#ark-continuous-check");
+      const detail = panel.querySelector("#ark-continuous-detail");
+      const concurrencySel = panel.querySelector("#ark-continuous-concurrency");
+      const planHint = panel.querySelector("#ark-continuous-plan-hint");
+      const totalText = panel.querySelector("#ark-continuous-total");
+      if (checkLabel)
+        checkLabel.textContent = action === "buy" ? "一键梭哈" : "一键清仓";
+      if (totalLabel)
+        totalLabel.textContent = action === "buy" ? "合计买入" : "合计卖出";
+      if (check) check.checked = false;
+      if (detail) detail.hidden = true;
+      if (concurrencySel) {
+        concurrencySel.value = "5";
+        delete concurrencySel.dataset.touched; // 复位手动修改标记，下次勾选重新自动计算
+      }
+      const intervalSel = panel.querySelector("#ark-continuous-interval");
+      if (intervalSel) intervalSel.value = "1";
+      if (planHint) planHint.textContent = "";
+      if (totalText) totalText.textContent = "-";
+      this._continuousPlan = null;
+      // 恢复被梭哈/清仓模式隐藏的输入行/快捷按钮
+      this._syncContinuousView?.();
+      panel.querySelector("#ark-trade-cancel").textContent = "取消";
 
       // 快捷按钮可用性
       const quickBtns = panel.querySelectorAll("#ark-trade-quick-row button");
