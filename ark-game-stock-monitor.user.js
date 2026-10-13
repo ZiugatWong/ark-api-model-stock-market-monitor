@@ -2,7 +2,7 @@
 // @name         Ark API 模型股市监控
 // @description  Ark 模型股市数据聚合分析与价格变动通知（game.arkengine.me）
 // @namespace    http://tampermonkey.net/
-// @version      1.0.13
+// @version      1.0.14
 // @author       ziugat
 // @license      GPL-3.0
 // @homepage     https://github.com/ZiugatWong/ark-api-model-stock-market-monitor
@@ -5465,10 +5465,7 @@
         ["#ark-trade-shares-row", "#ark-trade-value-hint"].forEach((sel) => {
           panel.querySelector(sel).style.display = on ? "none" : "";
         });
-        [
-          "#ark-trade-quick-label",
-          "#ark-trade-cap-label",
-        ].forEach((sel) => {
+        ["#ark-trade-quick-label", "#ark-trade-cap-label"].forEach((sel) => {
           panel.querySelector(sel).style.display = on ? "none" : "";
         });
         ["#ark-trade-quick-row", "#ark-trade-cap-row"].forEach((sel) => {
@@ -5708,8 +5705,7 @@
         if (concurrencySel && !concurrencySel.dataset.touched)
           concurrencySel.value = "1";
       };
-      const fmtAmt = (v) =>
-        Utils.formatThousands(Math.round(v * 100) / 100);
+      const fmtAmt = (v) => Utils.formatThousands(Math.round(v * 100) / 100);
 
       if (!hintEl) return;
       hintEl.textContent = "";
@@ -5719,10 +5715,9 @@
       }
       const feePct = isBuy ? state.buyFeePct : state.sellFeePct;
       // 每股交易金额（买入含买手续费，卖出含卖手续费，与金额上限校验同口径）
-      const unit =
-        isBuy
-          ? state.price * (1 + feePct / 100)
-          : state.price * (1 - feePct / 100);
+      const unit = isBuy
+        ? state.price * (1 + feePct / 100)
+        : state.price * (1 - feePct / 100);
       if (!(unit > 0)) {
         fail("✗ 现价数据不足，无法计算，请刷新");
         return;
@@ -5794,7 +5789,11 @@
           planConcurrency = Math.min(5, total, Number(concurrencySel.value));
         }
       }
-      this._continuousPlan = { total, concurrency: planConcurrency, sharesList };
+      this._continuousPlan = {
+        total,
+        concurrency: planConcurrency,
+        sharesList,
+      };
       if (totalEl) totalEl.textContent = String(total);
       hintEl.textContent =
         total > 1
@@ -5871,7 +5870,9 @@
       confirmBtn.textContent = state.action === "buy" ? "确定买入" : "确定卖出";
       cancelBtn.textContent = "取消";
       const resultText = `✓ 一键${state.action === "buy" ? "梭哈" : "清仓"}结束：成功 ${success} 条，失败 ${failed} 条`;
-      statusEl.textContent = aborted ? `已中止。${resultText.slice(1)}` : resultText;
+      statusEl.textContent = aborted
+        ? `已中止。${resultText.slice(1)}`
+        : resultText;
       statusEl.className = "ark-trade-status";
       statusEl.classList.add(!aborted && failed === 0 ? "ok" : "err");
 
@@ -6003,7 +6004,9 @@
       if (price > 0) {
         const feePct = action === "buy" ? buyFeePct : sellFeePct;
         const factor = action === "buy" ? 1 + feePct / 100 : 1 - feePct / 100;
-        capShares = Math.floor(CONFIG.TRADE_API_MAX_AMOUNT / (price * factor) - 1e-9);
+        capShares = Math.floor(
+          CONFIG.TRADE_API_MAX_AMOUNT / (price * factor) - 1e-9,
+        );
       }
 
       this._tradeState = {
