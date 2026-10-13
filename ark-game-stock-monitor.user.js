@@ -27,6 +27,8 @@
     LEGACY_STORAGE_KEY: "windhub_stock_data",
     TABLE_DISPLAY_LIMIT: 5,
     CACHE_DURATION: 5 * 60 * 1000,
+    // 接口单笔交易金额上限（2147483647 分 = 21474836.47 代币）
+    TRADE_API_MAX_AMOUNT: 21474836.47,
     MODEL_COLORS: [
       { name: "红", value: "#F55454" },
       { name: "绿", value: "#00A854" },
@@ -1586,7 +1588,7 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: 240px;
+      width: 280px;
       background: #1a1a1a;
       color: #f0f0f0;
       border: 1px solid #333;
@@ -5368,6 +5370,11 @@
               <button class="ark-gray-btn" data-ratio="quarter">1/4</button>
               <button class="ark-gray-btn" data-ratio="tenth">1/10</button>
             </div>
+            <div class="ark-trade-quick-label" id="ark-trade-cap-label"></div>
+            <div class="ark-trade-quick-grid" id="ark-trade-cap-row">
+              <button class="ark-gray-btn" data-ratio="all">全部</button>
+              <button class="ark-gray-btn" data-ratio="half">1/2</button>
+            </div>
             <div class="ark-trade-lock" id="ark-trade-lock" hidden></div>
             <div class="ark-trade-status" id="ark-trade-status"></div>
             <div class="ark-trade-actions">
@@ -5403,7 +5410,20 @@
         });
       });
 
-      // 实时更新市值提示
+      // 接口上限金额快捷按钮：按上限金额 × 比例换算股数填入
+      panel.querySelectorAll("#ark-trade-cap-row button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const state = this._tradeState;
+          if (!state || btn.disabled) return;
+          const ratios = { all: 1, half: 0.5 };
+          const shares = Math.floor(
+            state.capShares * (ratios[btn.dataset.ratio] || 1),
+          );
+          const input = panel.querySelector("#ark-trade-shares");
+          input.value = shares >= 1 ? shares : "";
+          this._updateTradeValueHint();
+        });
+      });
       panel.querySelector("#ark-trade-shares").addEventListener("input", () => {
         this._updateTradeValueHint();
       });
@@ -5611,7 +5631,9 @@
       // 价格统一取本地保存的最新价格，不读 stocks.priceCents
       const priceList = data.priceData?.[stockId];
       const price =
-        priceList && priceList.length ? priceList[priceList.length - 1][1] : null;
+        priceList && priceList.length
+          ? priceList[priceList.length - 1][1]
+          : null;
       if (useFresh) {
         const rawPos = Array.isArray(fresh.market.positions)
           ? fresh.market.positions.find((p) => p.stockId === stockId)
@@ -5653,6 +5675,14 @@
         maxShares = pos ? pos.shares : 0;
       }
 
+      // 按接口上限金额换算的可交易股数（买入含买手续费，卖出含卖手续费）
+      let capShares = 0;
+      if (price > 0) {
+        const feePct = action === "buy" ? buyFeePct : sellFeePct;
+        const factor = action === "buy" ? 1 + feePct / 100 : 1 - feePct / 100;
+        capShares = Math.floor(CONFIG.TRADE_API_MAX_AMOUNT / (price * factor) - 1e-9);
+      }
+
       this._tradeState = {
         action,
         stockId,
@@ -5663,6 +5693,7 @@
         sellFeePct,
         locked,
         maxShares,
+        capShares,
         confirmDisabled: false,
       };
 
@@ -5693,6 +5724,13 @@
       if (quickLabel) {
         quickLabel.textContent =
           action === "buy" ? "买入可用代币的：" : "卖出持仓股数的：";
+      }
+      const capLabel = panel.querySelector("#ark-trade-cap-label");
+      if (capLabel) {
+        capLabel.textContent =
+          action === "buy"
+            ? `买入接口金额上限（${Utils.formatThousands(CONFIG.TRADE_API_MAX_AMOUNT)}）的：`
+            : `卖出接口金额上限（${Utils.formatThousands(CONFIG.TRADE_API_MAX_AMOUNT)}）的：`;
       }
       if (action === "buy") {
         infoRow("可用代币", balanceText);
@@ -5743,6 +5781,8 @@
       // 快捷按钮可用性
       const quickBtns = panel.querySelectorAll("#ark-trade-quick-row button");
       quickBtns.forEach((b) => (b.disabled = maxShares < 1));
+      const capBtns = panel.querySelectorAll("#ark-trade-cap-row button");
+      capBtns.forEach((b) => (b.disabled = capShares < 1));
       this._updateTradeValueHint();
 
       // 各类禁用场景
