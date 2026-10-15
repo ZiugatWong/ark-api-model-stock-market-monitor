@@ -361,10 +361,13 @@
       const btn = document.getElementById("btn-filter");
       const bar = document.getElementById("filter-bar");
       btn.addEventListener("click", () => {
+        const wasOpen = this._open;
         this._open = !this._open;
         bar.hidden = !this._open;
         btn.classList.toggle("active", this._open);
         btn.setAttribute("aria-pressed", String(this._open));
+        // 展开时滚回页面顶部，让筛选面板（在卡片网格上方）直接可见
+        if (this._open && !wasOpen) this._scrollToTop();
       });
 
       const input = document.getElementById("filter-name");
@@ -430,6 +433,16 @@
       const active = this._cfg.tags.includes(btn.dataset.tag);
       btn.classList.toggle("active", active);
       btn.setAttribute("aria-pressed", String(active));
+    },
+
+    // 滚回页面顶部（筛选面板位于卡片网格上方，顶部即可见）
+    _scrollToTop() {
+      window.scrollTo({
+        top: 0,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+      });
     },
 
     // 判定单个模型是否通过筛选
