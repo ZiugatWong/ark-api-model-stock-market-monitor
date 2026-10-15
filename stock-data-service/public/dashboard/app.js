@@ -8,6 +8,9 @@
 
   /* ---------------- CONFIG ---------------- */
   const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+  // 自动刷新失败后的重试：固定间隔，最多重试 MAX_RETRY 次
+  const RETRY_INTERVAL_MS = 30 * 1000;
+  const MAX_RETRY = 3;
   const RANGES = [
     { key: "1d", label: "1天", seconds: 86400 },
     { key: "3d", label: "3天", seconds: 259200 },
@@ -49,8 +52,9 @@
     priceData: {}, // {[stockId]: [{timestamp(秒), price}]}
     range: "1d", // 详情视图默认可视区间（图表始终加载全量数据，区间仅控制可视窗口）
     detailId: null,
-    timer: null,
+    timer: null, // setTimeout 的 id（每次刷新后按 lastUpdated 重排）
     lastUpdated: 0,
+    retryCount: 0, // 连续失败计数，成功后归零
     loading: false,
   };
 
@@ -1219,7 +1223,12 @@
   }
 
   async function run({ isAuto } = {}) {
-    if (State.loading) return;
+    if (State.loading) {
+      // 撞车（上一次还没结束）：本次跳过，但要重新排定下一次，避免丢掉定时任务
+      if (!isAuto) State.retryCount = 0; // 手动刷新视为新一轮，重置重试计数
+      scheduleAutoRefresh();
+      return;
+    }
     State.loading = true;
     // 加载中提示：更新时间位置改为文案；按钮仅做一圈旋转动画（纯视觉，不联动其他控件）。
     // 移除→强制回流→重加类，否则快速连续刷新时类已存在、动画不会重播
@@ -1246,6 +1255,7 @@
       State.models = sortModels(models);
       State.priceData = priceData || {};
       State.lastUpdated = Date.now();
+      State.retryCount = 0;
       hideError();
 
       const staleCache = modelsData.staleCache === true;
@@ -1273,36 +1283,57 @@
       // 详情打开时同步更新
       Detail.updateData();
     } catch (err) {
-      // 刷新失败保留旧数据，仅弹横条；文案恢复为上一次成功的时间（从未成功过则不显示时间）
+      // 失败同样推进 lastUpdated（记录失败时刻）；连续请求上限为 MAX_RETRY 次
       showError(`数据加载失败：${err.message}`);
-      if (State.lastUpdated > 0) {
-        document.getElementById("last-updated").textContent =
-          `更新时间： ${formatTimestamp(Math.floor(State.lastUpdated / 1000), "full")}`;
-      } else {
-        document.getElementById("last-updated").textContent = "暂无数据";
-      }
+      State.lastUpdated = Date.now();
+      State.retryCount++;
+      document.getElementById("last-updated").textContent =
+        `更新失败： ${formatTimestamp(Math.floor(State.lastUpdated / 1000), "full")}`;
     } finally {
       State.loading = false;
+      scheduleAutoRefresh();
     }
   }
 
-  function startAutoRefresh() {
-    // 后台标签页暂停定时刷新，回前台重启；超期则立即补拉
-    const restartTimer = () => {
-      clearInterval(State.timer);
-      State.timer = setInterval(run, REFRESH_INTERVAL_MS);
-    };
+  // 按 lastUpdated 计算下一次自动刷新的时间；每次刷新后都重排，
+  // 因此手动刷新成功也会顺延下一次自动刷新。
+  function scheduleAutoRefresh() {
+    clearTimeout(State.timer);
+    State.timer = null;
+    // 后台标签页不排任务（节省资源），回前台时由 visibilitychange 重排
+    if (document.visibilityState !== "visible") return;
+
+    let delay;
+    if (State.retryCount > 0 && State.retryCount < MAX_RETRY) {
+      delay = RETRY_INTERVAL_MS; // 连续失败：固定间隔重试，直到累计请求达到上限
+    } else if (State.lastUpdated === 0) {
+      delay = REFRESH_INTERVAL_MS; // 从未成功过：避免 0 延迟造成热循环
+    } else {
+      // 以 lastUpdated 为基准：距上次更新满一个间隔就该刷新
+      delay = Math.max(0, REFRESH_INTERVAL_MS - (Date.now() - State.lastUpdated));
+    }
+
+    State.timer = setTimeout(() => {
+      if (document.visibilityState === "visible") run({ isAuto: true });
+    }, delay);
+  }
+
+  function initAutoRefresh() {
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
-        if (Date.now() - State.lastUpdated > REFRESH_INTERVAL_MS) {
+        // 超期则立即补拉（其 finally 会以新的 lastUpdated 重排）；
+        // 未超期则按剩余时间继续，不重置周期
+        if (Date.now() - State.lastUpdated >= REFRESH_INTERVAL_MS) {
           run({ isAuto: true });
+        } else {
+          scheduleAutoRefresh();
         }
-        restartTimer();
       } else {
-        clearInterval(State.timer);
+        clearTimeout(State.timer);
+        State.timer = null;
       }
     });
-    restartTimer();
+    scheduleAutoRefresh();
   }
 
   /* ---------------- App ---------------- */
@@ -1314,13 +1345,16 @@
     MoreMenu.init();
     Manual.init();
     Changelog.init();
-    document
-      .getElementById("btn-refresh")
-      .addEventListener("click", () => run());
-    document.getElementById("btn-retry").addEventListener("click", () => run());
+    // 手动刷新：重置重试计数，视为新一轮
+    const manualRun = () => {
+      State.retryCount = 0;
+      run();
+    };
+    document.getElementById("btn-refresh").addEventListener("click", manualRun);
+    document.getElementById("btn-retry").addEventListener("click", manualRun);
 
     await run();
-    startAutoRefresh();
+    initAutoRefresh();
   }
 
   init();
